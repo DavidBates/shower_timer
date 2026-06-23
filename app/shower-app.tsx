@@ -741,13 +741,6 @@ export default function ShowerApp() {
     try {
       const timestamp = new Date().toISOString();
 
-      const { error: sessionError } = await supabase
-        .from("shower_sessions")
-        .delete()
-        .gte("created_at", "1970-01-01");
-
-      if (sessionError) throw sessionError;
-
       if (timers.length > 0) {
         const results = await Promise.all(
           timers.map((timer) =>
@@ -770,6 +763,13 @@ export default function ShowerApp() {
         const updateError = results.find((r) => r.error)?.error;
         if (updateError) throw updateError;
       }
+
+      const { error: sessionError } = await supabase
+        .from("shower_sessions")
+        .delete()
+        .gte("created_at", "1970-01-01");
+
+      if (sessionError) throw sessionError;
 
       await loadData(true);
     } catch (resetError) {
