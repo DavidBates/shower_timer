@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import {
+  Award,
   BarChart3,
   Check,
   CircleStop,
@@ -52,7 +53,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 
 type ParticipantType = "boy" | "girl" | "adult_chaperone";
 type MonitorNumber = (typeof MONITOR_NUMBERS)[number];
-type ViewMode = "timers" | "admin";
+type ViewMode = "timers" | "admin" | "report";
 type TimerStatus = "idle" | "active" | "paused" | "warning" | "expired";
 type SessionStatus = "active" | "completed" | "replaced" | "cleared";
 
@@ -215,7 +216,17 @@ function coerceMonitor(value: string | number | null): MonitorNumber | null {
 
 function getInitialView(): ViewMode {
   if (typeof window === "undefined") return "timers";
-  return new URL(window.location.href).searchParams.has("admin") ? "admin" : "timers";
+  const params = new URL(window.location.href).searchParams;
+  if (params.has("admin")) return "admin";
+  if (params.has("report")) return "report";
+  return "timers";
+}
+
+function getBarColor(seconds: number): string {
+  if (seconds < 4 * 60) return "var(--green)";
+  if (seconds < 6 * 60) return "var(--teal)";
+  if (seconds < 8 * 60) return "var(--amber)";
+  return "var(--red)";
 }
 
 function getInitialMonitor(): MonitorNumber {
@@ -331,11 +342,10 @@ export default function ShowerApp() {
 
   useEffect(() => {
     const url = new URL(window.location.href);
-    if (view === "admin") {
-      url.searchParams.set("admin", "");
-    } else {
-      url.searchParams.delete("admin");
-    }
+    url.searchParams.delete("admin");
+    url.searchParams.delete("report");
+    if (view === "admin") url.searchParams.set("admin", "");
+    else if (view === "report") url.searchParams.set("report", "");
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }, [view]);
 
@@ -853,7 +863,9 @@ export default function ShowerApp() {
             <p className="subtle">
               {view === "timers"
                 ? `Monitor ${selectedMonitor} - ${visibleTimers.length} cards`
-                : `${workgroups.length} workgroups`}
+                : view === "report"
+                  ? "Speed leaderboard"
+                  : `${workgroups.length} workgroups`}
             </p>
           </div>
         </div>
@@ -875,6 +887,14 @@ export default function ShowerApp() {
             >
               <BarChart3 size={17} />
               Admin
+            </button>
+            <button
+              className={`tab-button ${view === "report" ? "active" : ""}`}
+              onClick={() => setView("report")}
+              type="button"
+            >
+              <Award size={17} />
+              Report
             </button>
           </div>
           <button
@@ -972,6 +992,10 @@ export default function ShowerApp() {
           nowMs={nowMs}
           workgroups={workgroups}
         />
+      )}
+
+      {view === "report" && (
+        <ReportView groupStats={groupStats} workgroups={workgroups} />
       )}
 
       {nextTarget && (
@@ -1544,5 +1568,92 @@ function StatCard({
       </div>
       <div className="stat-value">{value}</div>
     </article>
+  );
+}
+
+function ReportView({
+  workgroups,
+  groupStats,
+}: {
+  workgroups: Workgroup[];
+  groupStats: Map<string, GroupStat>;
+}) {
+  const data = workgroups
+    .map((wg) => {
+      const stat = groupStats.get(wg.id) ?? emptyGroupStat();
+      const avgSeconds =
+        stat.completed > 0
+          ? Math.round(stat.totalActualSeconds / stat.completed)
+          : null;
+      return { workgroup: wg, stat, avgSeconds };
+    })
+    .filter((d): d is typeof d & { avgSeconds: number } => d.avgSeconds !== null)
+    .sort((a, b) => a.avgSeconds - b.avgSeconds);
+
+  if (data.length === 0) {
+    return (
+      <div className="empty-state">
+        No completed sessions yet — get those showers going!
+      </div>
+    );
+  }
+
+  const maxSeconds = data[data.length - 1].avgSeconds;
+  const overallAvg = Math.round(
+    data.reduce((sum, d) => sum + d.avgSeconds, 0) / data.length,
+  );
+
+  return (
+    <section className="report-view">
+      <div className="report-header">
+        <h2 className="report-title">Shower Speed Leaderboard</h2>
+        <p className="subtle">
+          Fastest group earns bragging rights. Slowest group owes everyone an apology.
+          Overall avg: <strong>{formatTime(overallAvg)}</strong>
+        </p>
+      </div>
+
+      <div className="report-chart">
+        {data.map((d, i) => {
+          const pct = Math.max(2, (d.avgSeconds / maxSeconds) * 100);
+          const isFirst = i === 0;
+          const isLast = i === data.length - 1;
+          const rank = i + 1;
+          const medal =
+            rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : String(rank);
+
+          return (
+            <div className="chart-row" key={d.workgroup.id}>
+              <div className="chart-rank">{medal}</div>
+              <div className="chart-label" title={d.workgroup.name}>
+                {d.workgroup.name}
+              </div>
+              <div className="chart-track">
+                <div
+                  className="chart-bar"
+                  style={{ width: `${pct}%`, background: getBarColor(d.avgSeconds) }}
+                />
+              </div>
+              <div className="chart-value">
+                {formatTime(d.avgSeconds)}
+                {isFirst && <span className="chart-badge" title="Speed legend">⚡</span>}
+                {isLast && data.length > 1 && (
+                  <span className="chart-badge" title="Future spa owner">🛁</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="report-footnote">
+        {data.length} group{data.length !== 1 ? "s" : ""} with completed sessions
+        · {data.reduce((n, d) => n + d.stat.completed, 0)} total showers
+        · Color: <span style={{ color: "var(--green)" }}>under 4 min</span>
+        {" · "}<span style={{ color: "var(--teal)" }}>4–6 min</span>
+        {" · "}<span style={{ color: "var(--amber)" }}>6–8 min</span>
+        {" · "}<span style={{ color: "var(--red)" }}>8+ min</span>
+      </p>
+    </section>
   );
 }

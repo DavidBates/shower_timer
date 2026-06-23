@@ -639,6 +639,88 @@ td {
   font-weight: 850;
 }
 
+.report-view {
+  display: grid;
+  gap: 16px;
+}
+
+.report-header {
+  display: grid;
+  gap: 4px;
+}
+
+.report-title {
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+.report-chart {
+  display: grid;
+  gap: 7px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.chart-row {
+  display: grid;
+  grid-template-columns: 36px 180px 1fr 90px;
+  gap: 10px;
+  align-items: center;
+}
+
+.chart-rank {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+.chart-label {
+  overflow: hidden;
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-track {
+  height: 26px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--panel-strong);
+}
+
+.chart-bar {
+  height: 100%;
+  min-width: 4px;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.chart-value {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.chart-badge {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.report-footnote {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     padding: 12px;
@@ -655,7 +737,7 @@ td {
   }
 
   .tabbar {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .monitor-switcher {
@@ -677,5 +759,9 @@ td {
   .segment-grid,
   .modal-actions {
     grid-template-columns: 1fr;
+  }
+
+  .chart-row {
+    grid-template-columns: 28px minmax(0, 140px) 1fr 80px;
   }
 }
