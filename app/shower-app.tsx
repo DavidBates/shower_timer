@@ -103,6 +103,7 @@ type GroupStat = {
   girl: number;
   adult_chaperone: number;
   lastStarted: string | null;
+  totalActualSeconds: number;
 };
 
 type Summary = {
@@ -138,11 +139,11 @@ const statusOrder: Record<TimerStatus, number> = {
 };
 
 function formatTime(seconds: number) {
-  const safeSeconds = Math.max(0, Math.floor(seconds));
-  const minutes = Math.floor(safeSeconds / 60);
-  const remainder = safeSeconds % 60;
-
-  return `${minutes}:${String(remainder).padStart(2, "0")}`;
+  const negative = seconds < 0;
+  const abs = Math.abs(Math.floor(seconds));
+  const minutes = Math.floor(abs / 60);
+  const remainder = abs % 60;
+  return `${negative ? "-" : ""}${minutes}:${String(remainder).padStart(2, "0")}`;
 }
 
 function formatClock(value: string | null) {
@@ -170,11 +171,11 @@ function secondsToMinutesInput(seconds: number) {
 
 function getRemaining(timer: ShowerTimer, nowMs: number) {
   if (!timer.running || !timer.started_at) {
-    return Math.max(0, timer.remaining_seconds);
+    return timer.remaining_seconds;
   }
 
   const elapsed = Math.floor((nowMs - new Date(timer.started_at).getTime()) / 1000);
-  return Math.max(0, timer.remaining_seconds - elapsed);
+  return timer.remaining_seconds - elapsed;
 }
 
 function getTimerStatus(timer: ShowerTimer, nowMs: number): TimerStatus {
@@ -201,6 +202,7 @@ function emptyGroupStat(): GroupStat {
     girl: 0,
     adult_chaperone: 0,
     lastStarted: null,
+    totalActualSeconds: 0,
   };
 }
 
@@ -390,7 +392,14 @@ export default function ShowerApp() {
       stat[session.participant_type] += 1;
 
       if (session.status === "active") stat.active += 1;
-      if (session.status === "completed") stat.completed += 1;
+      if (session.status === "completed") {
+        stat.completed += 1;
+        if (session.completed_at) {
+          stat.totalActualSeconds += Math.round(
+            (new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 1000,
+          );
+        }
+      }
       if (!stat.lastStarted || session.started_at > stat.lastStarted) {
         stat.lastStarted = session.started_at;
       }
@@ -701,8 +710,8 @@ export default function ShowerApp() {
     const nextCardNumber = Math.max(1, Math.round(Number(cardNumber) || timer.card_number));
     const durationSeconds = minutesToSeconds(minutes);
     const remaining = timer.running
-      ? Math.min(getRemaining(timer, nowMs), durationSeconds)
-      : Math.min(timer.remaining_seconds || durationSeconds, durationSeconds);
+      ? Math.max(0, Math.min(getRemaining(timer, nowMs), durationSeconds))
+      : Math.max(0, Math.min(timer.remaining_seconds || durationSeconds, durationSeconds));
     const timestamp = new Date().toISOString();
 
     setSavingId(timer.id);
@@ -1452,6 +1461,7 @@ function AdminView({
                 <th>Girls</th>
                 <th>Chaperones</th>
                 <th>Completed</th>
+                <th>Avg time</th>
                 <th>Last</th>
               </tr>
             </thead>
@@ -1500,6 +1510,11 @@ function AdminView({
                     <td>{stat.girl}</td>
                     <td>{stat.adult_chaperone}</td>
                     <td>{stat.completed}</td>
+                    <td>
+                      {stat.completed > 0
+                        ? formatTime(Math.round(stat.totalActualSeconds / stat.completed))
+                        : "—"}
+                    </td>
                     <td>{formatClock(stat.lastStarted)}</td>
                   </tr>
                 );
