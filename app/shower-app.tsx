@@ -729,7 +729,7 @@ export default function ShowerApp() {
   async function resetAll() {
     if (
       !window.confirm(
-        "Reset the entire board? All timers will be cleared and set back to Available. Session history is preserved.",
+        "Master reset? This will delete ALL session history and clear every timer. This cannot be undone.",
       )
     ) {
       return;
@@ -741,18 +741,12 @@ export default function ShowerApp() {
     try {
       const timestamp = new Date().toISOString();
 
-      const activeIds = timers
-        .map((timer) => timer.active_session_id)
-        .filter((id): id is string => Boolean(id));
+      const { error: sessionError } = await supabase
+        .from("shower_sessions")
+        .delete()
+        .gte("created_at", "1970-01-01");
 
-      if (activeIds.length > 0) {
-        const { error: sessionError } = await supabase
-          .from("shower_sessions")
-          .update({ completed_at: timestamp, status: "cleared" })
-          .in("id", activeIds);
-
-        if (sessionError) throw sessionError;
-      }
+      if (sessionError) throw sessionError;
 
       if (timers.length > 0) {
         const results = await Promise.all(
