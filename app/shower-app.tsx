@@ -1586,7 +1586,6 @@ function ReportView({
       );
       const boys = done.filter((s) => s.participant_type === "boy").length;
       const girls = done.filter((s) => s.participant_type === "girl").length;
-      const chaperones = done.filter((s) => s.participant_type === "adult_chaperone").length;
 
       return {
         workgroup: wg,
@@ -1594,8 +1593,6 @@ function ReportView({
         avgSeconds: Math.round(stat.totalActualSeconds / stat.completed),
         boys,
         girls,
-        chaperones,
-        total: done.length,
       };
     })
     .filter((d): d is NonNullable<typeof d> => d !== null)
@@ -1615,15 +1612,72 @@ function ReportView({
   const maxSeconds = data[data.length - 1].avgSeconds;
   const avgLinePct = (overallAvg / maxSeconds) * 100;
 
+  const totalBoys = data.reduce((n, d) => n + d.boys, 0);
+  const totalGirls = data.reduce((n, d) => n + d.girls, 0);
+  const pieTotal = totalBoys + totalGirls;
+  const boysPiePct = pieTotal > 0 ? (totalBoys / pieTotal) * 100 : 50;
+  const girlsPiePct = pieTotal > 0 ? (totalGirls / pieTotal) * 100 : 50;
+
   return (
     <section className="report-view">
-      <div className="report-hero">
-        <div>
-          <h2 className="report-title">Shower Speed Leaderboard</h2>
-          <p className="subtle">
-            Ranked fastest to slowest. The last group owes everyone a cold shower apology.
-          </p>
+      <div>
+        <h2 className="report-title">Shower Speed Leaderboard</h2>
+        <p className="subtle">
+          Ranked fastest to slowest. The last group owes everyone a cold shower apology.
+        </p>
+      </div>
+
+      <div className="report-cards">
+        <div className="report-card">
+          <div className="report-card-label">Boys vs Girls</div>
+          <div className="pie-container">
+            <svg viewBox="0 0 36 36" className="pie-svg">
+              <circle
+                cx="18" cy="18" r="15.9155"
+                fill="none"
+                stroke="var(--panel-strong)"
+                strokeWidth="4"
+              />
+              {boysPiePct > 0 && (
+                <circle
+                  cx="18" cy="18" r="15.9155"
+                  fill="none"
+                  stroke="var(--teal)"
+                  strokeWidth="4"
+                  strokeDasharray={`${boysPiePct} ${100 - boysPiePct}`}
+                  strokeDashoffset="25"
+                />
+              )}
+              {girlsPiePct > 0 && (
+                <circle
+                  cx="18" cy="18" r="15.9155"
+                  fill="none"
+                  stroke="var(--violet)"
+                  strokeWidth="4"
+                  strokeDasharray={`${girlsPiePct} ${100 - girlsPiePct}`}
+                  strokeDashoffset={25 - boysPiePct}
+                />
+              )}
+            </svg>
+            <div className="pie-stats">
+              <div className="pie-stat-row">
+                <span className="pie-dot" style={{ background: "var(--teal)" }} />
+                <div>
+                  <div className="pie-count">{totalBoys}</div>
+                  <div className="pie-label">Boys · {Math.round(boysPiePct)}%</div>
+                </div>
+              </div>
+              <div className="pie-stat-row">
+                <span className="pie-dot" style={{ background: "var(--violet)" }} />
+                <div>
+                  <div className="pie-count">{totalGirls}</div>
+                  <div className="pie-label">Girls · {Math.round(girlsPiePct)}%</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+
         <div className="report-kpi">
           <span className="report-kpi-label">Overall avg</span>
           <span className="report-kpi-value">{formatTime(overallAvg)}</span>
@@ -1641,21 +1695,17 @@ function ReportView({
           Girls
         </span>
         <span className="legend-item">
-          <span className="legend-swatch" style={{ background: "var(--amber)" }} />
-          Chaperones
-        </span>
-        <span className="legend-item legend-avg">
           <span className="legend-swatch legend-swatch-dashed" />
-          Group avg
+          Avg line
         </span>
       </div>
 
       <div className="report-chart">
         {data.map((d, i) => {
           const barPct = Math.max(3, (d.avgSeconds / maxSeconds) * 100);
-          const boyPct = d.total > 0 ? (d.boys / d.total) * 100 : 0;
-          const girlPct = d.total > 0 ? (d.girls / d.total) * 100 : 0;
-          const chaperonePct = d.total > 0 ? (d.chaperones / d.total) * 100 : 0;
+          const bgTotal = d.boys + d.girls;
+          const boyPct = bgTotal > 0 ? (d.boys / bgTotal) * 100 : 0;
+          const girlPct = bgTotal > 0 ? (d.girls / bgTotal) * 100 : 0;
           const isFirst = i === 0;
           const isLast = i === data.length - 1;
           const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : String(i + 1);
@@ -1673,9 +1723,6 @@ function ReportView({
                   )}
                   {girlPct > 0 && (
                     <div className="chart-seg seg-girl" style={{ width: `${girlPct}%` }} />
-                  )}
-                  {chaperonePct > 0 && (
-                    <div className="chart-seg seg-chaperone" style={{ width: `${chaperonePct}%` }} />
                   )}
                 </div>
                 <div className="chart-avg-line" style={{ left: `${avgLinePct}%` }} />
