@@ -872,7 +872,7 @@ export default function ShowerApp() {
 
       {nextTarget && (
         <NextKidModal
-          defaultMinutes={secondsToMinutesInput(nextTarget.duration_seconds)}
+          defaultMinutes={secondsToMinutesInput(DEFAULT_SECONDS)}
           isSaving={savingId === nextTarget.id}
           onClose={() => setNextTarget(null)}
           onSubmit={(workgroupId, participantType, minutes) =>
