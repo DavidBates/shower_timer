@@ -264,6 +264,13 @@ h1 {
   color: var(--violet);
 }
 
+.sync-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .sync-state {
   display: inline-flex;
   align-items: center;
@@ -395,9 +402,32 @@ h1 {
   margin-top: 8px;
 }
 
+.timer-head-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.timer-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex: 1;
+}
+
+.card-reset {
+  color: var(--muted);
+  font-size: 0.85rem;
+  border-color: var(--line);
+}
+
+.card-next {
+  width: 100%;
+  justify-content: center;
+}
+
 .timer-time {
-  align-self: center;
-  justify-self: end;
   color: var(--cream);
   font-size: 3.5rem;
   font-variant-numeric: tabular-nums;
@@ -419,7 +449,7 @@ h1 {
 
 .card-actions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .bottom-nav {
@@ -899,12 +929,14 @@ td {
     display: none;
   }
 
-  .sync-label {
-    display: none;
+  .monitor-button {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 0 10px;
+    font-size: 0.85rem;
   }
 
-  .monitor-switcher {
-    grid-template-columns: 1fr;
+  .monitor-count {
+    display: none;
   }
 
   .timer-grid {
@@ -912,26 +944,22 @@ td {
   }
 
   .timer-card {
-    min-height: 220px;
+    min-height: 0;
+    padding: 12px;
+    gap: 10px;
   }
 
   .timer-time {
     font-size: 5rem;
-    justify-self: center;
-    padding: 8px 0;
   }
 
-  .card-actions {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-  }
-
-  .card-actions .button {
+  .card-next {
     min-height: 52px;
-    font-size: 1rem;
+    font-size: 1.1rem;
   }
 
-  .pill-row {
+  .pill-row,
+  .timer-meta {
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;

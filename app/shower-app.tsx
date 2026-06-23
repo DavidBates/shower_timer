@@ -32,7 +32,6 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 const DEFAULT_SECONDS = 6 * 60;
 const WARNING_SECONDS = 60;
-const STARTER_CARD_COUNT = 4;
 const MONITOR_NUMBERS = [1, 2, 3] as const;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -519,77 +518,6 @@ export default function ShowerApp() {
     }
   }
 
-  async function finishCard(timer: ShowerTimer) {
-    const timestamp = new Date().toISOString();
-    setSavingId(timer.id);
-    setError(null);
-
-    try {
-      await finishSession(timer, "completed");
-
-      const { error: timerError } = await supabase
-        .from("shower_timers")
-        .update({
-          label: "Available",
-          workgroup_id: null,
-          participant_type: null,
-          remaining_seconds: timer.duration_seconds,
-          running: false,
-          started_at: null,
-          active_session_id: null,
-          updated_at: timestamp,
-        })
-        .eq("id", timer.id);
-
-      if (timerError) throw timerError;
-      await loadData(true);
-    } catch (finishError) {
-      setError(finishError instanceof Error ? finishError.message : "Unable to finish card.");
-    } finally {
-      setSavingId(null);
-    }
-  }
-
-  async function toggleTimer(timer: ShowerTimer) {
-    if (!timer.workgroup_id) {
-      setNextTarget(timer);
-      return;
-    }
-
-    const timestamp = new Date().toISOString();
-    const remaining = getRemaining(timer, nowMs);
-    setSavingId(timer.id);
-    setError(null);
-
-    try {
-      const { error: timerError } = await supabase
-        .from("shower_timers")
-        .update(
-          timer.running
-            ? {
-                remaining_seconds: remaining,
-                running: false,
-                started_at: null,
-                updated_at: timestamp,
-              }
-            : {
-                remaining_seconds: remaining || timer.duration_seconds,
-                running: true,
-                started_at: timestamp,
-                updated_at: timestamp,
-              },
-        )
-        .eq("id", timer.id);
-
-      if (timerError) throw timerError;
-      await loadData(true);
-    } catch (toggleError) {
-      setError(toggleError instanceof Error ? toggleError.message : "Unable to update timer.");
-    } finally {
-      setSavingId(null);
-    }
-  }
-
   async function addTimer() {
     const stationTimers = timers.filter(
       (timer) => timer.monitor_number === selectedMonitor,
@@ -653,60 +581,26 @@ export default function ShowerApp() {
     }
   }
 
-  async function resetCards() {
-    if (
-      !window.confirm(
-        `Reset Monitor ${selectedMonitor} to Cards 1-${STARTER_CARD_COUNT}? Active sessions on this monitor will be cleared.`,
-      )
-    ) {
-      return;
-    }
-
-    setBusyAction("reset");
+  async function resetTimer(timer: ShowerTimer) {
+    const timestamp = new Date().toISOString();
+    setSavingId(timer.id);
     setError(null);
-
     try {
-      const activeIds = timers
-        .filter((timer) => timer.monitor_number === selectedMonitor)
-        .map((timer) => timer.active_session_id)
-        .filter((id): id is string => Boolean(id));
-
-      if (activeIds.length > 0) {
-        const { error: sessionError } = await supabase
-          .from("shower_sessions")
-          .update({
-            completed_at: new Date().toISOString(),
-            status: "cleared",
-          })
-          .in("id", activeIds);
-
-        if (sessionError) throw sessionError;
-      }
-
-      const { error: deleteError } = await supabase
+      const { error: timerError } = await supabase
         .from("shower_timers")
-        .delete()
-        .eq("monitor_number", selectedMonitor);
-
-      if (deleteError) throw deleteError;
-
-      const rows = Array.from({ length: STARTER_CARD_COUNT }, (_, index) => ({
-        monitor_number: selectedMonitor,
-        card_number: index + 1,
-        label: "Available",
-        duration_seconds: DEFAULT_SECONDS,
-        remaining_seconds: DEFAULT_SECONDS,
-        sort_order: index + 1,
-        updated_at: new Date().toISOString(),
-      }));
-
-      const { error: insertError } = await supabase.from("shower_timers").insert(rows);
-      if (insertError) throw insertError;
+        .update({
+          remaining_seconds: timer.duration_seconds,
+          running: false,
+          started_at: null,
+          updated_at: timestamp,
+        })
+        .eq("id", timer.id);
+      if (timerError) throw timerError;
       await loadData(true);
     } catch (resetError) {
-      setError(resetError instanceof Error ? resetError.message : "Unable to reset cards.");
+      setError(resetError instanceof Error ? resetError.message : "Unable to reset timer.");
     } finally {
-      setBusyAction(null);
+      setSavingId(null);
     }
   }
 
@@ -891,14 +785,6 @@ export default function ShowerApp() {
               Report
             </button>
           </div>
-          <button
-            className="button ghost"
-            onClick={() => void loadData()}
-            type="button"
-          >
-            <RefreshCw size={17} />
-            <span className="sync-label">Sync</span>
-          </button>
         </div>
       </header>
 
@@ -906,6 +792,7 @@ export default function ShowerApp() {
         isLive={isLive}
         lastSynced={lastSynced}
         nextTimer={visibleSummary.nextTimer}
+        onSync={() => void loadData()}
         summary={visibleSummary}
         nowMs={nowMs}
         selectedMonitor={selectedMonitor}
@@ -928,27 +815,6 @@ export default function ShowerApp() {
             selectedMonitor={selectedMonitor}
           />
 
-          <div className="top-actions" style={{ marginBottom: 10 }}>
-            <button
-              className="button primary"
-              disabled={busyAction === "add"}
-              onClick={() => void addTimer()}
-              type="button"
-            >
-              <Plus size={17} />
-              Add card
-            </button>
-            <button
-              className="button ghost"
-              disabled={busyAction === "reset"}
-              onClick={() => void resetCards()}
-              type="button"
-            >
-              <RotateCcw size={17} />
-              Reset 1-{STARTER_CARD_COUNT}
-            </button>
-          </div>
-
           {sortedTimers.length === 0 ? (
             <div className="empty-state">No cards</div>
           ) : (
@@ -959,16 +825,26 @@ export default function ShowerApp() {
                   isSaving={savingId === timer.id}
                   nowMs={nowMs}
                   onEdit={() => setEditTarget(timer)}
-                  onFinish={() => void finishCard(timer)}
                   onNext={() => setNextTarget(timer)}
                   onRemove={() => void removeTimer(timer)}
-                  onToggle={() => void toggleTimer(timer)}
+                  onReset={() => void resetTimer(timer)}
                   timer={timer}
                   workgroup={timer.workgroup_id ? workgroupById.get(timer.workgroup_id) : undefined}
                 />
               ))}
             </section>
           )}
+
+          <button
+            className="button primary add-card-btn"
+            disabled={busyAction === "add"}
+            onClick={() => void addTimer()}
+            style={{ marginTop: 10 }}
+            type="button"
+          >
+            <Plus size={17} />
+            Add card
+          </button>
         </>
       )}
 
@@ -1053,6 +929,7 @@ function SummaryStrip({
   lastSynced,
   nextTimer,
   nowMs,
+  onSync,
   selectedMonitor,
   summary,
 }: {
@@ -1060,6 +937,7 @@ function SummaryStrip({
   lastSynced: Date | null;
   nextTimer?: ShowerTimer;
   nowMs: number;
+  onSync: () => void;
   selectedMonitor: MonitorNumber;
   summary: {
     active: number;
@@ -1106,11 +984,16 @@ function SummaryStrip({
           </span>
         )}
       </div>
-      <span className={`sync-state ${isLive ? "live" : ""}`}>
-        {isLive ? <Wifi size={16} /> : <WifiOff size={16} />}
-        {isLive ? "Live" : "Offline"}
-        {lastSynced ? ` - ${formatClock(lastSynced.toISOString())}` : ""}
-      </span>
+      <div className="sync-row">
+        <span className={`sync-state ${isLive ? "live" : ""}`}>
+          {isLive ? <Wifi size={16} /> : <WifiOff size={16} />}
+          {isLive ? "Live" : "Offline"}
+          {lastSynced ? ` - ${formatClock(lastSynced.toISOString())}` : ""}
+        </span>
+        <button className="icon-button" onClick={onSync} type="button" aria-label="Sync">
+          <RefreshCw size={15} />
+        </button>
+      </div>
     </section>
   );
 }
@@ -1146,20 +1029,18 @@ function TimerCard({
   isSaving,
   nowMs,
   onEdit,
-  onFinish,
   onNext,
   onRemove,
-  onToggle,
+  onReset,
   timer,
   workgroup,
 }: {
   isSaving: boolean;
   nowMs: number;
   onEdit: () => void;
-  onFinish: () => void;
   onNext: () => void;
   onRemove: () => void;
-  onToggle: () => void;
+  onReset: () => void;
   timer: ShowerTimer;
   workgroup?: Workgroup;
 }) {
@@ -1189,40 +1070,44 @@ function TimerCard({
             </span>
           </div>
         </div>
-        <button
-          aria-label={`Edit Card ${timer.card_number}`}
-          className="icon-button"
-          disabled={isSaving}
-          onClick={onEdit}
-          title="Edit card"
-          type="button"
-        >
-          <Pencil size={17} />
+        <div className="timer-head-actions">
+          <button
+            aria-label={`Edit Card ${timer.card_number}`}
+            className="icon-button"
+            disabled={isSaving}
+            onClick={onEdit}
+            title="Edit card"
+            type="button"
+          >
+            <Pencil size={17} />
+          </button>
+          <button
+            aria-label={`Delete Card ${timer.card_number}`}
+            className="icon-button"
+            disabled={isSaving}
+            onClick={onRemove}
+            title="Delete card"
+            type="button"
+          >
+            <Trash2 size={17} />
+          </button>
+        </div>
+      </div>
+
+      <div className="timer-body">
+        <div className="timer-time" aria-label={`${formatTime(remaining)} remaining`}>
+          {formatTime(remaining)}
+        </div>
+        <button className="button ghost card-reset" disabled={isSaving} onClick={onReset} type="button">
+          <RotateCcw size={15} />
+          Reset
         </button>
       </div>
 
-      <div className="timer-time" aria-label={`${formatTime(remaining)} remaining`}>
-        {formatTime(remaining)}
-      </div>
-
-      <div className="card-actions">
-        <button className="button primary" disabled={isSaving} onClick={onNext} type="button">
-          <Plus size={17} />
-          Next
-        </button>
-        <button className="button green" disabled={isSaving} onClick={onToggle} type="button">
-          {timer.running ? <Pause size={17} /> : <Play size={17} />}
-          {timer.running ? "Pause" : "Start"}
-        </button>
-        <button className="button amber" disabled={isSaving} onClick={onFinish} type="button">
-          <Check size={17} />
-          Done
-        </button>
-        <button className="button red" disabled={isSaving} onClick={onRemove} type="button">
-          <Trash2 size={17} />
-          Remove
-        </button>
-      </div>
+      <button className="button primary card-next" disabled={isSaving} onClick={onNext} type="button">
+        <Plus size={17} />
+        Next
+      </button>
     </article>
   );
 }
