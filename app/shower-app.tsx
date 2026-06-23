@@ -34,10 +34,10 @@ const WARNING_SECONDS = 60;
 const STARTER_CARD_COUNT = 4;
 const MONITOR_NUMBERS = [1, 2, 3] as const;
 const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ??
+  import.meta.env.VITE_SUPABASE_URL ??
   "https://gexteohhuehtyvkddtkz.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
   "sb_publishable_SaHEKf81xnxims_RTr-IYg_3nj8UFRz";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -726,6 +726,65 @@ export default function ShowerApp() {
     }
   }
 
+  async function resetAll() {
+    if (
+      !window.confirm(
+        "Reset the entire board? All timers will be cleared and set back to Available. Session history is preserved.",
+      )
+    ) {
+      return;
+    }
+
+    setBusyAction("reset-all");
+    setError(null);
+
+    try {
+      const timestamp = new Date().toISOString();
+
+      const activeIds = timers
+        .map((timer) => timer.active_session_id)
+        .filter((id): id is string => Boolean(id));
+
+      if (activeIds.length > 0) {
+        const { error: sessionError } = await supabase
+          .from("shower_sessions")
+          .update({ completed_at: timestamp, status: "cleared" })
+          .in("id", activeIds);
+
+        if (sessionError) throw sessionError;
+      }
+
+      if (timers.length > 0) {
+        const results = await Promise.all(
+          timers.map((timer) =>
+            supabase
+              .from("shower_timers")
+              .update({
+                label: "Available",
+                workgroup_id: null,
+                participant_type: null,
+                remaining_seconds: timer.duration_seconds,
+                running: false,
+                started_at: null,
+                active_session_id: null,
+                updated_at: timestamp,
+              })
+              .eq("id", timer.id),
+          ),
+        );
+
+        const updateError = results.find((r) => r.error)?.error;
+        if (updateError) throw updateError;
+      }
+
+      await loadData(true);
+    } catch (resetError) {
+      setError(resetError instanceof Error ? resetError.message : "Unable to reset board.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   async function saveWorkgroupName(workgroup: Workgroup) {
     const name = (groupDrafts[workgroup.id] ?? workgroup.name).trim();
     if (!name || name === workgroup.name) return;
@@ -882,6 +941,7 @@ export default function ShowerApp() {
           onDraftChange={(id, value) =>
             setGroupDrafts((current) => ({ ...current, [id]: value }))
           }
+          onResetAll={() => void resetAll()}
           onSaveWorkgroup={(workgroup) => void saveWorkgroupName(workgroup)}
           sessions={sessions}
           summary={globalSummary}
@@ -1286,6 +1346,7 @@ function AdminView({
   groupStats,
   nowMs,
   onDraftChange,
+  onResetAll,
   onSaveWorkgroup,
   sessions,
   summary,
@@ -1297,6 +1358,7 @@ function AdminView({
   groupStats: Map<string, GroupStat>;
   nowMs: number;
   onDraftChange: (id: string, value: string) => void;
+  onResetAll: () => void;
   onSaveWorkgroup: (workgroup: Workgroup) => void;
   sessions: ShowerSession[];
   summary: Summary;
@@ -1312,6 +1374,18 @@ function AdminView({
 
   return (
     <section className="admin-grid" aria-label="Admin stats">
+      <div className="admin-actions">
+        <button
+          className="button red"
+          disabled={busyAction === "reset-all"}
+          onClick={onResetAll}
+          type="button"
+        >
+          <RotateCcw size={17} />
+          Reset Board
+        </button>
+      </div>
+
       <div className="stat-grid">
         <StatCard icon={ClipboardCheck} label="Sessions" value={sessions.length} />
         <StatCard icon={Check} label="Completed" value={summary.completedSessions} />
