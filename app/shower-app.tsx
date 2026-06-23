@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   Clock,
   Mars,
+  Monitor,
   Pause,
   Pencil,
   Play,
@@ -30,7 +31,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 const DEFAULT_SECONDS = 6 * 60;
 const WARNING_SECONDS = 60;
-const STARTER_CARD_COUNT = 6;
+const STARTER_CARD_COUNT = 4;
+const MONITOR_NUMBERS = [1, 2, 3] as const;
 const SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL ??
   "https://gexteohhuehtyvkddtkz.supabase.co";
@@ -47,6 +49,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 });
 
 type ParticipantType = "boy" | "girl" | "adult_chaperone";
+type MonitorNumber = (typeof MONITOR_NUMBERS)[number];
 type ViewMode = "timers" | "admin";
 type TimerStatus = "idle" | "active" | "paused" | "warning" | "expired";
 type SessionStatus = "active" | "completed" | "replaced" | "cleared";
@@ -61,6 +64,7 @@ type Workgroup = {
 
 type ShowerTimer = {
   id: string;
+  monitor_number: number;
   card_number: number;
   label: string;
   workgroup_id: string | null;
@@ -78,6 +82,7 @@ type ShowerTimer = {
 type ShowerSession = {
   id: string;
   timer_id: string | null;
+  monitor_number: number;
   card_number: number;
   workgroup_id: string;
   participant_type: ParticipantType;
@@ -96,6 +101,18 @@ type GroupStat = {
   girl: number;
   adult_chaperone: number;
   lastStarted: string | null;
+};
+
+type Summary = {
+  active: number;
+  warning: number;
+  expired: number;
+  paused: number;
+  idle: number;
+  nextTimer?: ShowerTimer;
+  groupsLogged: number;
+  completedSessions: number;
+  activeSessions: number;
 };
 
 const participantLabels: Record<ParticipantType, string> = {
@@ -185,8 +202,66 @@ function emptyGroupStat(): GroupStat {
   };
 }
 
+function coerceMonitor(value: string | number | null): MonitorNumber | null {
+  const monitor = Number(value);
+  return MONITOR_NUMBERS.includes(monitor as MonitorNumber)
+    ? (monitor as MonitorNumber)
+    : null;
+}
+
+function getInitialMonitor(): MonitorNumber {
+  if (typeof window === "undefined") return 1;
+
+  const urlMonitor = coerceMonitor(
+    new URL(window.location.href).searchParams.get("monitor"),
+  );
+  if (urlMonitor) return urlMonitor;
+
+  return coerceMonitor(window.localStorage.getItem("shower-monitor")) ?? 1;
+}
+
+function buildSummary(
+  timers: ShowerTimer[],
+  groupStats: Map<string, GroupStat>,
+  sessions: ShowerSession[],
+  nowMs: number,
+): Summary {
+  const counts = {
+    active: 0,
+    warning: 0,
+    expired: 0,
+    paused: 0,
+    idle: 0,
+  };
+
+  for (const timer of timers) {
+    counts[getTimerStatus(timer, nowMs)] += 1;
+  }
+
+  const activeTimers = timers.filter(
+    (timer) => timer.running && getRemaining(timer, nowMs) > 0,
+  );
+  const nextTimer = activeTimers.sort(
+    (a, b) => getRemaining(a, nowMs) - getRemaining(b, nowMs),
+  )[0];
+
+  return {
+    ...counts,
+    nextTimer,
+    groupsLogged: [...groupStats.values()].filter((stat) => stat.started > 0)
+      .length,
+    completedSessions: sessions.filter((session) => session.status === "completed")
+      .length,
+    activeSessions: sessions.filter((session) => session.status === "active")
+      .length,
+  };
+}
+
 export default function ShowerApp() {
   const [view, setView] = useState<ViewMode>("timers");
+  const [selectedMonitor, setSelectedMonitor] = useState<MonitorNumber>(
+    getInitialMonitor,
+  );
   const [workgroups, setWorkgroups] = useState<Workgroup[]>([]);
   const [timers, setTimers] = useState<ShowerTimer[]>([]);
   const [sessions, setSessions] = useState<ShowerSession[]>([]);
@@ -214,6 +289,7 @@ export default function ShowerApp() {
       supabase
         .from("shower_timers")
         .select("*")
+        .order("monitor_number", { ascending: true })
         .order("card_number", { ascending: true }),
       supabase
         .from("shower_sessions")
@@ -242,6 +318,16 @@ export default function ShowerApp() {
     const id = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("shower-monitor", String(selectedMonitor));
+
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("monitor") !== String(selectedMonitor)) {
+      url.searchParams.set("monitor", String(selectedMonitor));
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, [selectedMonitor]);
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void loadData(), 0);
@@ -297,8 +383,21 @@ export default function ShowerApp() {
     return stats;
   }, [sessions, workgroups]);
 
+  const visibleTimers = useMemo(() => {
+    return timers.filter((timer) => timer.monitor_number === selectedMonitor);
+  }, [selectedMonitor, timers]);
+
+  const monitorCardCounts = useMemo(() => {
+    return Object.fromEntries(
+      MONITOR_NUMBERS.map((monitorNumber) => [
+        monitorNumber,
+        timers.filter((timer) => timer.monitor_number === monitorNumber).length,
+      ]),
+    ) as Record<MonitorNumber, number>;
+  }, [timers]);
+
   const sortedTimers = useMemo(() => {
-    return [...timers].sort((a, b) => {
+    return [...visibleTimers].sort((a, b) => {
       const aStatus = getTimerStatus(a, nowMs);
       const bStatus = getTimerStatus(b, nowMs);
       const byStatus = statusOrder[aStatus] - statusOrder[bStatus];
@@ -307,38 +406,14 @@ export default function ShowerApp() {
       if (aStatus !== "idle") return getRemaining(a, nowMs) - getRemaining(b, nowMs);
       return a.card_number - b.card_number;
     });
-  }, [nowMs, timers]);
+  }, [nowMs, visibleTimers]);
 
-  const summary = useMemo(() => {
-    const counts = {
-      active: 0,
-      warning: 0,
-      expired: 0,
-      paused: 0,
-      idle: 0,
-    };
+  const visibleSummary = useMemo(() => {
+    return buildSummary(visibleTimers, groupStats, sessions, nowMs);
+  }, [groupStats, nowMs, sessions, visibleTimers]);
 
-    for (const timer of timers) {
-      counts[getTimerStatus(timer, nowMs)] += 1;
-    }
-
-    const activeTimers = timers.filter(
-      (timer) => timer.running && getRemaining(timer, nowMs) > 0,
-    );
-    const nextTimer = activeTimers.sort(
-      (a, b) => getRemaining(a, nowMs) - getRemaining(b, nowMs),
-    )[0];
-
-    return {
-      ...counts,
-      nextTimer,
-      groupsLogged: [...groupStats.values()].filter((stat) => stat.started > 0)
-        .length,
-      completedSessions: sessions.filter((session) => session.status === "completed")
-        .length,
-      activeSessions: sessions.filter((session) => session.status === "active")
-        .length,
-    };
+  const globalSummary = useMemo(() => {
+    return buildSummary(timers, groupStats, sessions, nowMs);
   }, [groupStats, nowMs, sessions, timers]);
 
   async function finishSession(timer: ShowerTimer, status: SessionStatus) {
@@ -375,6 +450,7 @@ export default function ShowerApp() {
         .from("shower_sessions")
         .insert({
           timer_id: timer.id,
+          monitor_number: timer.monitor_number,
           card_number: timer.card_number,
           workgroup_id: workgroupId,
           participant_type: participantType,
@@ -484,8 +560,13 @@ export default function ShowerApp() {
   }
 
   async function addTimer() {
+    const stationTimers = timers.filter(
+      (timer) => timer.monitor_number === selectedMonitor,
+    );
     const nextCard =
-      timers.length === 0 ? 1 : Math.max(...timers.map((timer) => timer.card_number)) + 1;
+      stationTimers.length === 0
+        ? 1
+        : Math.max(...stationTimers.map((timer) => timer.card_number)) + 1;
     const timestamp = new Date().toISOString();
 
     setBusyAction("add");
@@ -493,6 +574,7 @@ export default function ShowerApp() {
 
     try {
       const { error: addError } = await supabase.from("shower_timers").insert({
+        monitor_number: selectedMonitor,
         card_number: nextCard,
         label: "Available",
         duration_seconds: DEFAULT_SECONDS,
@@ -513,7 +595,9 @@ export default function ShowerApp() {
   async function removeTimer(timer: ShowerTimer) {
     if (
       timer.workgroup_id &&
-      !window.confirm(`Remove Card ${timer.card_number} and clear its active session?`)
+      !window.confirm(
+        `Remove Monitor ${timer.monitor_number} Card ${timer.card_number} and clear its active session?`,
+      )
     ) {
       return;
     }
@@ -539,7 +623,11 @@ export default function ShowerApp() {
   }
 
   async function resetCards() {
-    if (!window.confirm("Reset the board to Cards 1-6? Active sessions will be cleared.")) {
+    if (
+      !window.confirm(
+        `Reset Monitor ${selectedMonitor} to Cards 1-${STARTER_CARD_COUNT}? Active sessions on this monitor will be cleared.`,
+      )
+    ) {
       return;
     }
 
@@ -548,6 +636,7 @@ export default function ShowerApp() {
 
     try {
       const activeIds = timers
+        .filter((timer) => timer.monitor_number === selectedMonitor)
         .map((timer) => timer.active_session_id)
         .filter((id): id is string => Boolean(id));
 
@@ -566,11 +655,12 @@ export default function ShowerApp() {
       const { error: deleteError } = await supabase
         .from("shower_timers")
         .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000");
+        .eq("monitor_number", selectedMonitor);
 
       if (deleteError) throw deleteError;
 
       const rows = Array.from({ length: STARTER_CARD_COUNT }, (_, index) => ({
+        monitor_number: selectedMonitor,
         card_number: index + 1,
         label: "Available",
         duration_seconds: DEFAULT_SECONDS,
@@ -605,6 +695,7 @@ export default function ShowerApp() {
         const { error: sessionError } = await supabase
           .from("shower_sessions")
           .update({
+            monitor_number: timer.monitor_number,
             card_number: nextCardNumber,
             duration_seconds: durationSeconds,
           })
@@ -617,6 +708,7 @@ export default function ShowerApp() {
         .from("shower_timers")
         .update({
           card_number: nextCardNumber,
+          monitor_number: timer.monitor_number,
           duration_seconds: durationSeconds,
           remaining_seconds: remaining,
           started_at: timer.running ? timestamp : null,
@@ -676,7 +768,11 @@ export default function ShowerApp() {
           </span>
           <div>
             <h1>Shower Timers</h1>
-            <p className="subtle">{workgroups.length} workgroups</p>
+            <p className="subtle">
+              {view === "timers"
+                ? `Monitor ${selectedMonitor} - ${visibleTimers.length} cards`
+                : `${workgroups.length} workgroups`}
+            </p>
           </div>
         </div>
 
@@ -713,9 +809,10 @@ export default function ShowerApp() {
       <SummaryStrip
         isLive={isLive}
         lastSynced={lastSynced}
-        nextTimer={summary.nextTimer}
-        summary={summary}
+        nextTimer={visibleSummary.nextTimer}
+        summary={visibleSummary}
         nowMs={nowMs}
+        selectedMonitor={selectedMonitor}
       />
 
       {error && (
@@ -729,6 +826,12 @@ export default function ShowerApp() {
 
       {view === "timers" ? (
         <>
+          <MonitorSelector
+            cardCounts={monitorCardCounts}
+            onChange={setSelectedMonitor}
+            selectedMonitor={selectedMonitor}
+          />
+
           <div className="top-actions" style={{ marginBottom: 10 }}>
             <button
               className="button primary"
@@ -746,7 +849,7 @@ export default function ShowerApp() {
               type="button"
             >
               <RotateCcw size={17} />
-              Reset 1-6
+              Reset 1-{STARTER_CARD_COUNT}
             </button>
           </div>
 
@@ -781,7 +884,9 @@ export default function ShowerApp() {
           }
           onSaveWorkgroup={(workgroup) => void saveWorkgroupName(workgroup)}
           sessions={sessions}
-          summary={summary}
+          summary={globalSummary}
+          timers={timers}
+          nowMs={nowMs}
           workgroups={workgroups}
         />
       )}
@@ -818,12 +923,14 @@ function SummaryStrip({
   lastSynced,
   nextTimer,
   nowMs,
+  selectedMonitor,
   summary,
 }: {
   isLive: boolean;
   lastSynced: Date | null;
   nextTimer?: ShowerTimer;
   nowMs: number;
+  selectedMonitor: MonitorNumber;
   summary: {
     active: number;
     warning: number;
@@ -838,6 +945,10 @@ function SummaryStrip({
   return (
     <section className="status-strip" aria-label="Summary">
       <div className="pill-row">
+        <span className="pill teal">
+          <Monitor size={14} />
+          Monitor {selectedMonitor}
+        </span>
         <span className="pill teal">
           <Play size={14} />
           {summary.active} active
@@ -870,6 +981,33 @@ function SummaryStrip({
         {isLive ? "Live" : "Offline"}
         {lastSynced ? ` - ${formatClock(lastSynced.toISOString())}` : ""}
       </span>
+    </section>
+  );
+}
+
+function MonitorSelector({
+  cardCounts,
+  onChange,
+  selectedMonitor,
+}: {
+  cardCounts: Record<MonitorNumber, number>;
+  onChange: (monitorNumber: MonitorNumber) => void;
+  selectedMonitor: MonitorNumber;
+}) {
+  return (
+    <section className="monitor-switcher" aria-label="Monitor selector">
+      {MONITOR_NUMBERS.map((monitorNumber) => (
+        <button
+          className={`monitor-button ${selectedMonitor === monitorNumber ? "active" : ""}`}
+          key={monitorNumber}
+          onClick={() => onChange(monitorNumber)}
+          type="button"
+        >
+          <Monitor size={18} />
+          <span>Monitor {monitorNumber}</span>
+          <span className="monitor-count">{cardCounts[monitorNumber]} cards</span>
+        </button>
+      ))}
     </section>
   );
 }
@@ -908,6 +1046,7 @@ function TimerCard({
         <div className="timer-title">
           <h2>{title}</h2>
           <div className="timer-meta">
+            <span className="pill">Monitor {timer.monitor_number}</span>
             <span className="pill">Card {timer.card_number}</span>
             {timer.participant_type && (
               <span className="pill teal">
@@ -995,7 +1134,9 @@ function NextKidModal({
     <div className="modal-backdrop" onMouseDown={onClose}>
       <form className="modal" onMouseDown={(event) => event.stopPropagation()} onSubmit={submit}>
         <div className="modal-head">
-          <h2>Card {timer.card_number} next</h2>
+          <h2>
+            Monitor {timer.monitor_number} - Card {timer.card_number} next
+          </h2>
           <button className="icon-button" onClick={onClose} type="button">
             <X size={17} />
           </button>
@@ -1091,7 +1232,9 @@ function EditCardModal({
     <div className="modal-backdrop" onMouseDown={onClose}>
       <form className="modal" onMouseDown={(event) => event.stopPropagation()} onSubmit={submit}>
         <div className="modal-head">
-          <h2>Edit card</h2>
+          <h2>
+            Edit Monitor {timer.monitor_number} Card {timer.card_number}
+          </h2>
           <button className="icon-button" onClick={onClose} type="button">
             <X size={17} />
           </button>
@@ -1141,23 +1284,23 @@ function AdminView({
   busyAction,
   groupDrafts,
   groupStats,
+  nowMs,
   onDraftChange,
   onSaveWorkgroup,
   sessions,
   summary,
+  timers,
   workgroups,
 }: {
   busyAction: string | null;
   groupDrafts: Record<string, string>;
   groupStats: Map<string, GroupStat>;
+  nowMs: number;
   onDraftChange: (id: string, value: string) => void;
   onSaveWorkgroup: (workgroup: Workgroup) => void;
   sessions: ShowerSession[];
-  summary: {
-    activeSessions: number;
-    completedSessions: number;
-    groupsLogged: number;
-  };
+  summary: Summary;
+  timers: ShowerTimer[];
   workgroups: Workgroup[];
 }) {
   const totalBoys = sessions.filter((session) => session.participant_type === "boy").length;
@@ -1181,6 +1324,29 @@ function AdminView({
         <StatCard icon={Mars} label="Boys" value={totalBoys} />
         <StatCard icon={Venus} label="Girls" value={totalGirls} />
         <StatCard icon={UserRoundCheck} label="Chaperones" value={totalAdults} />
+      </div>
+
+      <div className="stat-grid">
+        {MONITOR_NUMBERS.map((monitorNumber) => {
+          const stationTimers = timers.filter(
+            (timer) => timer.monitor_number === monitorNumber,
+          );
+          const activeCards = stationTimers.filter(
+            (timer) => getTimerStatus(timer, nowMs) !== "idle",
+          ).length;
+          const stationSessions = sessions.filter(
+            (session) => session.monitor_number === monitorNumber,
+          ).length;
+
+          return (
+            <StatCard
+              icon={Monitor}
+              key={monitorNumber}
+              label={`Monitor ${monitorNumber} - ${stationSessions} runs`}
+              value={`${activeCards}/${stationTimers.length}`}
+            />
+          );
+        })}
       </div>
 
       <section className="admin-panel">

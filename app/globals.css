@@ -278,6 +278,42 @@ h1 {
   color: var(--green);
 }
 
+.monitor-switcher {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.monitor-button {
+  display: grid;
+  min-height: 52px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 900;
+  padding: 0 12px;
+  text-align: left;
+}
+
+.monitor-button.active {
+  border-color: rgba(45, 212, 191, 0.62);
+  background: rgba(45, 212, 191, 0.13);
+  color: var(--cream);
+}
+
+.monitor-count {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
 .error-banner {
   display: flex;
   align-items: center;
@@ -620,6 +656,10 @@ td {
 
   .tabbar {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .monitor-switcher {
+    grid-template-columns: 1fr;
   }
 
   .timer-grid {

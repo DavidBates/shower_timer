@@ -6,7 +6,8 @@ participant counts.
 
 ## Features
 
-- 6-minute default timer cards, with add/remove and reset-to-1-6 controls.
+- 6-minute default timer cards, with add/remove and monitor-specific reset controls.
+- Monitor 1, 2, and 3 views so each screen can run its own Card 1-4 set.
 - Next-kid modal with workgroup, boy/girl/adult chaperone, and minute fields.
 - Supabase-backed live state so multiple devices see the same board.
 - Admin stats for sessions, active showers, completed sessions, and all 26
@@ -26,8 +27,7 @@ Local dev runs at `http://localhost:3000/`.
 
 ## Supabase
 
-The database schema is captured in
-`supabase/migrations/20260623130000_create_shower_tracking.sql`.
+The database schema is captured in `supabase/migrations/`.
 
 The app uses a publishable Supabase browser key. For a different project, set:
 
