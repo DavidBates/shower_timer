@@ -209,6 +209,11 @@ function coerceMonitor(value: string | number | null): MonitorNumber | null {
     : null;
 }
 
+function getInitialView(): ViewMode {
+  if (typeof window === "undefined") return "timers";
+  return new URL(window.location.href).searchParams.has("admin") ? "admin" : "timers";
+}
+
 function getInitialMonitor(): MonitorNumber {
   if (typeof window === "undefined") return 1;
 
@@ -258,7 +263,7 @@ function buildSummary(
 }
 
 export default function ShowerApp() {
-  const [view, setView] = useState<ViewMode>("timers");
+  const [view, setView] = useState<ViewMode>(getInitialView);
   const [selectedMonitor, setSelectedMonitor] = useState<MonitorNumber>(
     getInitialMonitor,
   );
@@ -319,6 +324,16 @@ export default function ShowerApp() {
     const id = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (view === "admin") {
+      url.searchParams.set("admin", "");
+    } else {
+      url.searchParams.delete("admin");
+    }
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [view]);
 
   useEffect(() => {
     window.localStorage.setItem("shower-monitor", String(selectedMonitor));
