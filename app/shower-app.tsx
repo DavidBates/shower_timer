@@ -34,6 +34,11 @@ const DEFAULT_SECONDS = 6 * 60;
 const WARNING_SECONDS = 60;
 const STARTER_CARD_COUNT = 4;
 const MONITOR_NUMBERS = [1, 2, 3] as const;
+const STYLE_THEMES: { id: StyleTheme; label: string; note: string }[] = [
+  { id: "command", label: "Command", note: "high-contrast ops board" },
+  { id: "lagoon", label: "Lagoon", note: "bright aquatic dashboard" },
+  { id: "camp", label: "Camp", note: "warm field-station report" },
+];
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
@@ -54,6 +59,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 type ParticipantType = "boy" | "girl" | "adult_chaperone";
 type MonitorNumber = (typeof MONITOR_NUMBERS)[number];
 type ViewMode = "timers" | "admin" | "report";
+type StyleTheme = "command" | "lagoon" | "camp";
 type TimerStatus = "idle" | "active" | "paused" | "warning" | "expired";
 type SessionStatus = "active" | "completed" | "replaced" | "cleared";
 
@@ -223,6 +229,12 @@ function getInitialView(): ViewMode {
 }
 
 
+function getInitialStyle(): StyleTheme {
+  if (typeof window === "undefined") return "command";
+  const saved = window.localStorage.getItem("shower-style") as StyleTheme | null;
+  return saved && STYLE_THEMES.some((theme) => theme.id === saved) ? saved : "command";
+}
+
 function getInitialMonitor(): MonitorNumber {
   if (typeof window === "undefined") return 1;
 
@@ -276,6 +288,7 @@ export default function ShowerApp() {
   const [selectedMonitor, setSelectedMonitor] = useState<MonitorNumber>(
     getInitialMonitor,
   );
+  const [styleTheme, setStyleTheme] = useState<StyleTheme>(getInitialStyle);
   const [workgroups, setWorkgroups] = useState<Workgroup[]>([]);
   const [timers, setTimers] = useState<ShowerTimer[]>([]);
   const [sessions, setSessions] = useState<ShowerSession[]>([]);
@@ -342,6 +355,10 @@ export default function ShowerApp() {
     else if (view === "report") url.searchParams.set("report", "");
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }, [view]);
+
+  useEffect(() => {
+    window.localStorage.setItem("shower-style", styleTheme);
+  }, [styleTheme]);
 
   useEffect(() => {
     window.localStorage.setItem("shower-monitor", String(selectedMonitor));
@@ -839,14 +856,14 @@ export default function ShowerApp() {
 
   if (loading && !lastSynced) {
     return (
-      <main className="app-shell">
+      <main className="app-shell" data-theme={styleTheme}>
         <div className="loading-cover">Loading shower board...</div>
       </main>
     );
   }
 
   return (
-    <main className="app-shell">
+    <main className="app-shell" data-theme={styleTheme}>
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
@@ -891,6 +908,7 @@ export default function ShowerApp() {
               Report
             </button>
           </div>
+          <StyleSwitcher selectedStyle={styleTheme} onChange={setStyleTheme} />
           <button
             className="button ghost"
             onClick={() => void loadData()}
@@ -1018,6 +1036,31 @@ export default function ShowerApp() {
         />
       )}
     </main>
+  );
+}
+
+
+function StyleSwitcher({
+  onChange,
+  selectedStyle,
+}: {
+  onChange: (theme: StyleTheme) => void;
+  selectedStyle: StyleTheme;
+}) {
+  return (
+    <div className="style-switcher" aria-label="Visual style selector">
+      {STYLE_THEMES.map((theme) => (
+        <button
+          className={`style-button ${selectedStyle === theme.id ? "active" : ""}`}
+          key={theme.id}
+          onClick={() => onChange(theme.id)}
+          title={theme.note}
+          type="button"
+        >
+          {theme.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
