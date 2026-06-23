@@ -222,12 +222,6 @@ function getInitialView(): ViewMode {
   return "timers";
 }
 
-function getBarColor(seconds: number): string {
-  if (seconds < 4 * 60) return "var(--green)";
-  if (seconds < 6 * 60) return "var(--teal)";
-  if (seconds < 8 * 60) return "var(--amber)";
-  return "var(--red)";
-}
 
 function getInitialMonitor(): MonitorNumber {
   if (typeof window === "undefined") return 1;
@@ -926,7 +920,7 @@ export default function ShowerApp() {
         </div>
       )}
 
-      {view === "timers" ? (
+      {view === "timers" && (
         <>
           <MonitorSelector
             cardCounts={monitorCardCounts}
@@ -976,7 +970,9 @@ export default function ShowerApp() {
             </section>
           )}
         </>
-      ) : (
+      )}
+
+      {view === "admin" && (
         <AdminView
           busyAction={busyAction}
           groupDrafts={groupDrafts}
@@ -995,7 +991,7 @@ export default function ShowerApp() {
       )}
 
       {view === "report" && (
-        <ReportView groupStats={groupStats} workgroups={workgroups} />
+        <ReportView groupStats={groupStats} sessions={sessions} workgroups={workgroups} />
       )}
 
       {nextTarget && (
@@ -1574,53 +1570,95 @@ function StatCard({
 function ReportView({
   workgroups,
   groupStats,
+  sessions,
 }: {
   workgroups: Workgroup[];
   groupStats: Map<string, GroupStat>;
+  sessions: ShowerSession[];
 }) {
   const data = workgroups
     .map((wg) => {
       const stat = groupStats.get(wg.id) ?? emptyGroupStat();
-      const avgSeconds =
-        stat.completed > 0
-          ? Math.round(stat.totalActualSeconds / stat.completed)
-          : null;
-      return { workgroup: wg, stat, avgSeconds };
+      if (stat.completed === 0) return null;
+
+      const done = sessions.filter(
+        (s) => s.workgroup_id === wg.id && s.status === "completed",
+      );
+      const boys = done.filter((s) => s.participant_type === "boy").length;
+      const girls = done.filter((s) => s.participant_type === "girl").length;
+      const chaperones = done.filter((s) => s.participant_type === "adult_chaperone").length;
+
+      return {
+        workgroup: wg,
+        stat,
+        avgSeconds: Math.round(stat.totalActualSeconds / stat.completed),
+        boys,
+        girls,
+        chaperones,
+        total: done.length,
+      };
     })
-    .filter((d): d is typeof d & { avgSeconds: number } => d.avgSeconds !== null)
+    .filter((d): d is NonNullable<typeof d> => d !== null)
     .sort((a, b) => a.avgSeconds - b.avgSeconds);
 
   if (data.length === 0) {
     return (
       <div className="empty-state">
-        No completed sessions yet — get those showers going!
+        No completed sessions yet — get those showers going! 🚿
       </div>
     );
   }
 
+  const totalCompleted = data.reduce((n, d) => n + d.stat.completed, 0);
+  const totalSeconds = data.reduce((n, d) => n + d.stat.totalActualSeconds, 0);
+  const overallAvg = Math.round(totalSeconds / totalCompleted);
   const maxSeconds = data[data.length - 1].avgSeconds;
-  const overallAvg = Math.round(
-    data.reduce((sum, d) => sum + d.avgSeconds, 0) / data.length,
-  );
+  const avgLinePct = (overallAvg / maxSeconds) * 100;
 
   return (
     <section className="report-view">
-      <div className="report-header">
-        <h2 className="report-title">Shower Speed Leaderboard</h2>
-        <p className="subtle">
-          Fastest group earns bragging rights. Slowest group owes everyone an apology.
-          Overall avg: <strong>{formatTime(overallAvg)}</strong>
-        </p>
+      <div className="report-hero">
+        <div>
+          <h2 className="report-title">Shower Speed Leaderboard</h2>
+          <p className="subtle">
+            Ranked fastest to slowest. The last group owes everyone a cold shower apology.
+          </p>
+        </div>
+        <div className="report-kpi">
+          <span className="report-kpi-label">Overall avg</span>
+          <span className="report-kpi-value">{formatTime(overallAvg)}</span>
+          <span className="report-kpi-sub">{totalCompleted} showers · {data.length} groups</span>
+        </div>
+      </div>
+
+      <div className="report-legend">
+        <span className="legend-item">
+          <span className="legend-swatch" style={{ background: "var(--teal)" }} />
+          Boys
+        </span>
+        <span className="legend-item">
+          <span className="legend-swatch" style={{ background: "var(--violet)" }} />
+          Girls
+        </span>
+        <span className="legend-item">
+          <span className="legend-swatch" style={{ background: "var(--amber)" }} />
+          Chaperones
+        </span>
+        <span className="legend-item legend-avg">
+          <span className="legend-swatch legend-swatch-dashed" />
+          Group avg
+        </span>
       </div>
 
       <div className="report-chart">
         {data.map((d, i) => {
-          const pct = Math.max(2, (d.avgSeconds / maxSeconds) * 100);
+          const barPct = Math.max(3, (d.avgSeconds / maxSeconds) * 100);
+          const boyPct = d.total > 0 ? (d.boys / d.total) * 100 : 0;
+          const girlPct = d.total > 0 ? (d.girls / d.total) * 100 : 0;
+          const chaperonePct = d.total > 0 ? (d.chaperones / d.total) * 100 : 0;
           const isFirst = i === 0;
           const isLast = i === data.length - 1;
-          const rank = i + 1;
-          const medal =
-            rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : String(rank);
+          const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : String(i + 1);
 
           return (
             <div className="chart-row" key={d.workgroup.id}>
@@ -1629,31 +1667,28 @@ function ReportView({
                 {d.workgroup.name}
               </div>
               <div className="chart-track">
-                <div
-                  className="chart-bar"
-                  style={{ width: `${pct}%`, background: getBarColor(d.avgSeconds) }}
-                />
+                <div className="chart-fill" style={{ width: `${barPct}%` }}>
+                  {boyPct > 0 && (
+                    <div className="chart-seg seg-boy" style={{ width: `${boyPct}%` }} />
+                  )}
+                  {girlPct > 0 && (
+                    <div className="chart-seg seg-girl" style={{ width: `${girlPct}%` }} />
+                  )}
+                  {chaperonePct > 0 && (
+                    <div className="chart-seg seg-chaperone" style={{ width: `${chaperonePct}%` }} />
+                  )}
+                </div>
+                <div className="chart-avg-line" style={{ left: `${avgLinePct}%` }} />
               </div>
               <div className="chart-value">
                 {formatTime(d.avgSeconds)}
-                {isFirst && <span className="chart-badge" title="Speed legend">⚡</span>}
-                {isLast && data.length > 1 && (
-                  <span className="chart-badge" title="Future spa owner">🛁</span>
-                )}
+                {isFirst && <span className="chart-badge">⚡</span>}
+                {isLast && data.length > 1 && <span className="chart-badge">🛁</span>}
               </div>
             </div>
           );
         })}
       </div>
-
-      <p className="report-footnote">
-        {data.length} group{data.length !== 1 ? "s" : ""} with completed sessions
-        · {data.reduce((n, d) => n + d.stat.completed, 0)} total showers
-        · Color: <span style={{ color: "var(--green)" }}>under 4 min</span>
-        {" · "}<span style={{ color: "var(--teal)" }}>4–6 min</span>
-        {" · "}<span style={{ color: "var(--amber)" }}>6–8 min</span>
-        {" · "}<span style={{ color: "var(--red)" }}>8+ min</span>
-      </p>
     </section>
   );
 }

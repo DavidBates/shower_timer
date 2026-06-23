@@ -644,19 +644,88 @@ td {
   gap: 16px;
 }
 
-.report-header {
-  display: grid;
-  gap: 4px;
+.report-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .report-title {
-  font-size: 1.2rem;
+  font-size: 1.25rem;
   font-weight: 900;
+  margin-bottom: 4px;
+}
+
+.report-kpi {
+  display: grid;
+  gap: 2px;
+  padding: 12px 16px;
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  border-radius: 8px;
+  background: rgba(45, 212, 191, 0.08);
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.report-kpi-label {
+  color: var(--teal);
+  font-size: 0.75rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.report-kpi-value {
+  color: var(--cream);
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.report-kpi-sub {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.report-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.legend-swatch {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 3px;
+}
+
+.legend-swatch-dashed {
+  background: none;
+  border: 2px dashed rgba(255, 247, 223, 0.35);
+  border-radius: 0;
+  width: 14px;
+  height: 0;
+  border-width: 0 0 2px 0;
+  border-style: dashed;
 }
 
 .report-chart {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -666,7 +735,7 @@ td {
 
 .chart-row {
   display: grid;
-  grid-template-columns: 36px 180px 1fr 90px;
+  grid-template-columns: 36px 180px 1fr 76px;
   gap: 10px;
   align-items: center;
 }
@@ -680,24 +749,53 @@ td {
 
 .chart-label {
   overflow: hidden;
-  font-size: 0.88rem;
+  font-size: 0.87rem;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .chart-track {
-  height: 26px;
+  position: relative;
+  height: 30px;
   overflow: hidden;
-  border-radius: 4px;
+  border-radius: 6px;
   background: var(--panel-strong);
 }
 
-.chart-bar {
+.chart-fill {
+  display: flex;
   height: 100%;
-  min-width: 4px;
-  border-radius: 4px;
+  overflow: hidden;
+  border-radius: 6px;
   transition: width 0.5s ease;
+}
+
+.chart-seg {
+  height: 100%;
+}
+
+.seg-boy {
+  background: var(--teal);
+}
+
+.seg-girl {
+  background: var(--violet);
+}
+
+.seg-chaperone {
+  background: var(--amber);
+}
+
+.chart-avg-line {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  border-radius: 1px;
+  background: rgba(255, 247, 223, 0.45);
+  pointer-events: none;
+  transform: translateX(-50%);
 }
 
 .chart-value {
@@ -713,12 +811,6 @@ td {
 .chart-badge {
   font-size: 1rem;
   line-height: 1;
-}
-
-.report-footnote {
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-weight: 800;
 }
 
 @media (max-width: 760px) {
