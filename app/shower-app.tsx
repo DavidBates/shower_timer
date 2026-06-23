@@ -190,7 +190,7 @@ function getTimerStatus(timer: ShowerTimer, nowMs: number): TimerStatus {
 
 function makeTimerLabel(timer: ShowerTimer, workgroup: Workgroup | undefined) {
   if (!timer.workgroup_id || !timer.participant_type) return "Available";
-  return `${workgroup?.name ?? "Workgroup"} - ${participantLabels[timer.participant_type]}`;
+  return `${workgroup?.name ?? "Crew"} - ${participantLabels[timer.participant_type]}`;
 }
 
 function emptyGroupStat(): GroupStat {
@@ -496,7 +496,7 @@ export default function ShowerApp() {
       const { error: timerError } = await supabase
         .from("shower_timers")
         .update({
-          label: `${workgroup?.name ?? "Workgroup"} - ${participantLabels[participantType]}`,
+          label: `${workgroup?.name ?? "Crew"} - ${participantLabels[participantType]}`,
           workgroup_id: workgroupId,
           participant_type: participantType,
           duration_seconds: durationSeconds,
@@ -1158,7 +1158,7 @@ function NextKidModal({
         </div>
         <div className="modal-body">
           <label className="field-group">
-            <span className="field-label">Workgroup</span>
+            <span className="field-label">Crew</span>
             <select
               className="select"
               disabled={isSaving}
@@ -1380,7 +1380,7 @@ function AdminView({
 
       <section className="admin-panel">
         <div className="panel-head">
-          <h2>Workgroups</h2>
+          <h2>Crews</h2>
           <span className="pill">{workgroups.length} total</span>
         </div>
         <div className="table-wrap">
