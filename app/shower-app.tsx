@@ -294,6 +294,7 @@ export default function ShowerApp() {
       supabase
         .from("shower_sessions")
         .select("*")
+        .neq("status", "cleared")
         .order("started_at", { ascending: false })
         .limit(3000),
     ]);
@@ -764,12 +765,14 @@ export default function ShowerApp() {
         if (updateError) throw updateError;
       }
 
-      const { error: sessionError } = await supabase
-        .from("shower_sessions")
-        .delete()
-        .gte("created_at", "1970-01-01");
+      if (sessions.length > 0) {
+        const { error: sessionError } = await supabase
+          .from("shower_sessions")
+          .update({ completed_at: timestamp, status: "cleared" })
+          .in("id", sessions.map((s) => s.id));
 
-      if (sessionError) throw sessionError;
+        if (sessionError) throw sessionError;
+      }
 
       await loadData(true);
     } catch (resetError) {
