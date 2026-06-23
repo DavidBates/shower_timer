@@ -33,12 +33,14 @@ const DEFAULT_SECONDS = 6 * 60;
 const WARNING_SECONDS = 60;
 const STARTER_CARD_COUNT = 4;
 const MONITOR_NUMBERS = [1, 2, 3] as const;
-const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL ??
-  "https://gexteohhuehtyvkddtkz.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY =
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
-  "sb_publishable_SaHEKf81xnxims_RTr-IYg_3nj8UFRz";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  throw new Error(
+    "Missing Supabase configuration. Please set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY environment variables."
+  );
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   realtime: {

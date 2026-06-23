@@ -29,9 +29,11 @@ Local dev runs at `http://localhost:3000/`.
 
 The database schema is captured in `supabase/migrations/`.
 
-The app uses a publishable Supabase browser key. For a different project, set:
+The app requires Supabase configuration via environment variables:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+VITE_SUPABASE_URL=your-project-url
+VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 ```
+
+Create a `.env` file locally or set these in your deployment environment (e.g., GitHub Actions secrets for GitHub Pages).
