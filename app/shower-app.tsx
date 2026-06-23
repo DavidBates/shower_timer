@@ -865,7 +865,7 @@ export default function ShowerApp() {
         </div>
 
         <div className="top-actions">
-          <div className="tabbar" aria-label="View">
+          <div className="tabbar topbar-tabs" aria-label="View">
             <button
               className={`tab-button ${view === "timers" ? "active" : ""}`}
               onClick={() => setView("timers")}
@@ -897,7 +897,7 @@ export default function ShowerApp() {
             type="button"
           >
             <RefreshCw size={17} />
-            Sync
+            <span className="sync-label">Sync</span>
           </button>
         </div>
       </header>
@@ -1017,6 +1017,33 @@ export default function ShowerApp() {
           timer={editTarget}
         />
       )}
+
+      <nav className="bottom-nav" aria-label="Navigation">
+        <button
+          className={`bottom-nav-btn ${view === "timers" ? "active" : ""}`}
+          onClick={() => setView("timers")}
+          type="button"
+        >
+          <Timer size={22} />
+          <span>Timers</span>
+        </button>
+        <button
+          className={`bottom-nav-btn ${view === "admin" ? "active" : ""}`}
+          onClick={() => setView("admin")}
+          type="button"
+        >
+          <BarChart3 size={22} />
+          <span>Admin</span>
+        </button>
+        <button
+          className={`bottom-nav-btn ${view === "report" ? "active" : ""}`}
+          onClick={() => setView("report")}
+          type="button"
+        >
+          <Award size={22} />
+          <span>Report</span>
+        </button>
+      </nav>
     </main>
   );
 }

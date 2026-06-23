@@ -422,6 +422,10 @@ h1 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.bottom-nav {
+  display: none;
+}
+
 .empty-state {
   display: grid;
   min-height: 260px;
@@ -874,6 +878,7 @@ td {
 @media (max-width: 760px) {
   .app-shell {
     padding: 12px;
+    padding-bottom: 80px;
   }
 
   .topbar,
@@ -890,6 +895,14 @@ td {
     grid-template-columns: repeat(3, 1fr);
   }
 
+  .topbar-tabs {
+    display: none;
+  }
+
+  .sync-label {
+    display: none;
+  }
+
   .monitor-switcher {
     grid-template-columns: 1fr;
   }
@@ -898,12 +911,31 @@ td {
     grid-template-columns: 1fr;
   }
 
+  .timer-card {
+    min-height: 220px;
+  }
+
   .timer-time {
-    font-size: 3rem;
+    font-size: 5rem;
+    justify-self: center;
+    padding: 8px 0;
   }
 
   .card-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .card-actions .button {
+    min-height: 52px;
+    font-size: 1rem;
+  }
+
+  .pill-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
   }
 
   .segment-grid,
@@ -917,5 +949,45 @@ td {
 
   .chart-row {
     grid-template-columns: 28px minmax(0, 120px) 1fr 76px;
+  }
+
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: var(--panel-strong);
+    border-top: 1px solid var(--line-strong);
+    z-index: 100;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .bottom-nav-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    padding: 0 4px;
+    transition: color 0.15s ease;
+  }
+
+  .bottom-nav-btn.active {
+    color: var(--teal);
+  }
+
+  .bottom-nav-btn:active {
+    opacity: 0.7;
   }
 }
