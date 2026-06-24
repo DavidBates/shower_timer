@@ -518,6 +518,32 @@ export default function ShowerApp() {
     }
   }
 
+  async function stopTimer(timer: ShowerTimer) {
+    const timestamp = new Date().toISOString();
+    const remaining = getRemaining(timer, nowMs);
+    setSavingId(timer.id);
+    setError(null);
+    try {
+      await finishSession(timer, "completed");
+      const { error: timerError } = await supabase
+        .from("shower_timers")
+        .update({
+          remaining_seconds: remaining,
+          running: false,
+          started_at: null,
+          active_session_id: null,
+          updated_at: timestamp,
+        })
+        .eq("id", timer.id);
+      if (timerError) throw timerError;
+      await loadData(true);
+    } catch (stopError) {
+      setError(stopError instanceof Error ? stopError.message : "Unable to stop timer.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   async function addTimer() {
     const stationTimers = timers.filter(
       (timer) => timer.monitor_number === selectedMonitor,
@@ -828,6 +854,7 @@ export default function ShowerApp() {
                   onNext={() => setNextTarget(timer)}
                   onRemove={() => void removeTimer(timer)}
                   onReset={() => void resetTimer(timer)}
+                  onStop={() => void stopTimer(timer)}
                   timer={timer}
                   workgroup={timer.workgroup_id ? workgroupById.get(timer.workgroup_id) : undefined}
                 />
@@ -1032,6 +1059,7 @@ function TimerCard({
   onNext,
   onRemove,
   onReset,
+  onStop,
   timer,
   workgroup,
 }: {
@@ -1041,6 +1069,7 @@ function TimerCard({
   onNext: () => void;
   onRemove: () => void;
   onReset: () => void;
+  onStop: () => void;
   timer: ShowerTimer;
   workgroup?: Workgroup;
 }) {
@@ -1071,6 +1100,16 @@ function TimerCard({
           </div>
         </div>
         <div className="timer-head-actions">
+          <button
+            aria-label={`Stop Card ${timer.card_number}`}
+            className="icon-button"
+            disabled={isSaving || !timer.active_session_id}
+            onClick={onStop}
+            title="Stop and log time"
+            type="button"
+          >
+            <CircleStop size={17} />
+          </button>
           <button
             aria-label={`Edit Card ${timer.card_number}`}
             className="icon-button"
