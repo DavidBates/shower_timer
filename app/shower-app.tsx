@@ -8,6 +8,7 @@ import {
   CircleStop,
   ClipboardCheck,
   Clock,
+  Clapperboard,
   Mars,
   Monitor,
   Pause,
@@ -28,7 +29,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const DEFAULT_SECONDS = 6 * 60;
 const WARNING_SECONDS = 60;
@@ -1518,6 +1519,201 @@ function StatCard({
   );
 }
 
+type ReelOverviewRow = {
+  name: string;
+  avgSeconds: number;
+  boyAvgSec: number;
+  girlAvgSec: number;
+};
+
+type ReelSlide =
+  | { kind: "stat"; emoji: string; heading: string; crew: string; stat: string; quip: string; speak: string; accent: string }
+  | { kind: "overview"; speak: string; rows: ReelOverviewRow[]; maxSec: number };
+
+function buildReelSlides(
+  data: Array<{
+    workgroup: Workgroup;
+    avgSeconds: number;
+    boyAvgSec: number;
+    girlAvgSec: number;
+  }>,
+): ReelSlide[] {
+  const slides: ReelSlide[] = [];
+
+  const ranked = [...data].sort((a, b) => a.avgSeconds - b.avgSeconds);
+  const withData = ranked.filter((d) => d.avgSeconds > 0);
+
+  const medals = [
+    { emoji: "🥇", heading: "Fastest Crew", quip: "Are you sure you're clean?", accent: "var(--amber)" },
+    { emoji: "🥈", heading: "Second Fastest", quip: "Squeaky clean and proud.", accent: "var(--muted)" },
+    { emoji: "🥉", heading: "Third Fastest", quip: "Still impressively quick.", accent: "#c97c4a" },
+  ];
+
+  // Overview slide first
+  const maxSec = Math.max(...withData.flatMap((d) => [d.boyAvgSec, d.girlAvgSec]).filter((s) => s > 0), 1);
+  slides.push({
+    kind: "overview",
+    speak: "Here's a look at all the crews. Let's take a closer look.",
+    rows: withData.map((d) => ({
+      name: d.workgroup.name,
+      avgSeconds: d.avgSeconds,
+      boyAvgSec: d.boyAvgSec,
+      girlAvgSec: d.girlAvgSec,
+    })),
+    maxSec,
+  });
+
+  for (let i = 0; i < Math.min(3, withData.length); i++) {
+    const d = withData[i];
+    const m = medals[i];
+    slides.push({
+      kind: "stat",
+      emoji: m.emoji,
+      heading: m.heading,
+      crew: d.workgroup.name,
+      stat: formatTime(d.avgSeconds) + " avg",
+      quip: m.quip,
+      speak: `${m.heading}: ${d.workgroup.name} — ${formatTime(d.avgSeconds)} average. ${m.quip}`,
+      accent: m.accent,
+    });
+  }
+
+  const withBoth = withData.filter((d) => d.boyAvgSec > 0 && d.girlAvgSec > 0);
+  if (withBoth.length > 0) {
+    const discrepancy = withBoth.reduce((best, d) => {
+      const diff = Math.abs(d.boyAvgSec - d.girlAvgSec);
+      return diff > Math.abs(best.boyAvgSec - best.girlAvgSec) ? d : best;
+    });
+    const diff = Math.abs(discrepancy.boyAvgSec - discrepancy.girlAvgSec);
+    const longerGender = discrepancy.girlAvgSec > discrepancy.boyAvgSec ? "girls" : "boys";
+    const quip = longerGender === "girls"
+      ? "Bet your hair looks real nice 💅 Did you do your nails too?"
+      : "Extra scrub time, respect.";
+    slides.push({
+      kind: "stat",
+      emoji: "✂️",
+      heading: "Biggest Gender Gap",
+      crew: discrepancy.workgroup.name,
+      stat: formatTime(diff) + " gap",
+      quip,
+      speak: `Biggest gender gap: ${discrepancy.workgroup.name}, with a ${formatTime(diff)} difference. ${quip}`,
+      accent: "var(--violet)",
+    });
+  }
+
+  const slowest = withData[withData.length - 1];
+  if (slowest && withData.length > 1) {
+    slides.push({
+      kind: "stat",
+      emoji: "🛁",
+      heading: "Slowest Crew",
+      crew: slowest.workgroup.name,
+      stat: formatTime(slowest.avgSeconds) + " avg",
+      quip: "Were you taking a bath? 🦆",
+      speak: `And the slowest crew… ${slowest.workgroup.name}, with a ${formatTime(slowest.avgSeconds)} average. Were you taking a bath?`,
+      accent: "var(--red)",
+    });
+  }
+
+  return slides;
+}
+
+function ReelModal({
+  slides,
+  onClose,
+}: {
+  slides: ReelSlide[];
+  onClose: () => void;
+}) {
+  const [index, setIndex] = useState(0);
+  const [animKey, setAnimKey] = useState(0);
+
+  // Stable refs so `go` doesn't depend on ever-changing prop references.
+  // (Parent re-renders every second via the clock tick, which would otherwise
+  // reset the timeout on every tick before it fires.)
+  const slidesRef = useRef(slides);
+  useEffect(() => { slidesRef.current = slides; }, [slides]);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  const go = useCallback((next: number) => {
+    const s = slidesRef.current;
+    if (next >= s.length) {
+      onCloseRef.current();
+      return;
+    }
+    setIndex(next);
+    setAnimKey((k) => k + 1);
+    if (typeof speechSynthesis !== "undefined") {
+      speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(s[next].speak);
+      utt.rate = 0.95;
+      utt.pitch = 1.1;
+      speechSynthesis.speak(utt);
+    }
+  }, []); // no prop deps — uses refs
+
+  useEffect(() => {
+    go(0);
+    return () => {
+      if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+    };
+  }, [go]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => go(index + 1), 6000);
+    return () => clearTimeout(timer);
+  }, [index, go]); // go is now stable, so only re-runs when index changes
+
+  const slide = slides[index];
+
+  return (
+    <div className="reel-overlay" onClick={() => go(index + 1)}>
+      <div className="reel-stage" key={animKey}>
+        {slide.kind === "overview" ? (
+          <>
+            <div className="reel-ov-label">Let's take a closer look</div>
+            <div className="reel-ov-list">
+              {slide.rows.map((row, i) => {
+                const pct = Math.max(4, (row.avgSeconds / slide.maxSec) * 100);
+                const isFirst = i === 0;
+                const isLast = i === slide.rows.length - 1 && slide.rows.length > 1;
+                return (
+                  <div key={row.name} className="reel-ov-row">
+                    <div className="reel-ov-name">
+                      {isFirst ? "🥇 " : isLast ? "🛁 " : ""}{row.name}
+                    </div>
+                    <div className="reel-ov-track">
+                      <div className="reel-ov-fill" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="reel-emoji">{slide.emoji}</div>
+            <div className="reel-heading" style={{ color: slide.accent }}>{slide.heading}</div>
+            <div className="reel-crew">{slide.crew}</div>
+            <div className="reel-stat">{slide.stat}</div>
+            <div className="reel-quip">{slide.quip}</div>
+          </>
+        )}
+      </div>
+      <div className="reel-dots">
+        {slides.map((_, i) => (
+          <div key={i} className={`reel-dot${i === index ? " active" : ""}`} />
+        ))}
+      </div>
+      <div className="reel-hint">tap anywhere to skip</div>
+      <button className="reel-close" onClick={(e) => { e.stopPropagation(); onClose(); }}>
+        <X size={20} />
+      </button>
+    </div>
+  );
+}
+
 function ReportView({
   workgroups,
   groupStats,
@@ -1527,6 +1723,8 @@ function ReportView({
   groupStats: Map<string, GroupStat>;
   sessions: ShowerSession[];
 }) {
+  const [showReel, setShowReel] = useState(false);
+
   const data = workgroups
     .map((wg) => {
       const stat = groupStats.get(wg.id) ?? emptyGroupStat();
@@ -1592,13 +1790,24 @@ function ReportView({
     : 0;
   const genderMaxAvg = Math.max(boyAvg, girlAvg, 1);
 
+  const reelSlides = buildReelSlides(data);
+
   return (
     <section className="report-view">
-      <div>
-        <h2 className="report-title">Shower Speed Leaderboard</h2>
-        <p className="subtle">
-          Ranked fastest to slowest. The last group owes everyone a cold shower apology.
-        </p>
+      {showReel && (
+        <ReelModal slides={reelSlides} onClose={() => setShowReel(false)} />
+      )}
+      <div className="report-header">
+        <div>
+          <h2 className="report-title">Shower Speed Leaderboard</h2>
+          <p className="subtle">
+            Ranked fastest to slowest. The last group owes everyone a cold shower apology.
+          </p>
+        </div>
+        <button className="button reel-btn" onClick={() => setShowReel(true)}>
+          <Clapperboard size={17} />
+          Recap Reel
+        </button>
       </div>
 
       <div className="report-cards">
