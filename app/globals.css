@@ -860,7 +860,7 @@ td {
 
 .report-chart {
   display: grid;
-  gap: 8px;
+  gap: 4px;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -870,8 +870,57 @@ td {
 
 .chart-row {
   display: grid;
-  grid-template-columns: 36px 180px 1fr 76px;
+  grid-template-columns: 36px 160px 1fr 64px;
   gap: 10px;
+  align-items: center;
+  padding-block: 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.chart-row:first-child {
+  padding-top: 0;
+}
+
+.chart-row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.chart-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.chart-bar-line {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-bar-time {
+  padding: 0 6px;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  color: var(--bg);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.chart-crew-avg {
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  color: var(--cream);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.chart-bar-icon {
+  color: var(--muted);
+  display: flex;
   align-items: center;
 }
 
@@ -892,18 +941,20 @@ td {
 
 .chart-track {
   position: relative;
-  height: 30px;
+  height: 18px;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: 5px;
   background: var(--panel-strong);
 }
 
 .chart-fill {
   display: flex;
+  align-items: center;
+  justify-content: flex-end;
   height: 100%;
-  overflow: hidden;
-  border-radius: 6px;
+  border-radius: 5px;
   transition: width 0.5s ease;
+  overflow: hidden;
 }
 
 .chart-seg {
@@ -1019,7 +1070,7 @@ td {
   }
 
   .chart-row {
-    grid-template-columns: 28px minmax(0, 120px) 1fr 76px;
+    grid-template-columns: 28px minmax(0, 90px) 1fr;
   }
 
   .bottom-nav {

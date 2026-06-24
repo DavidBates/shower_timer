@@ -1533,17 +1533,29 @@ function ReportView({
       if (stat.completed === 0) return null;
 
       const done = sessions.filter(
-        (s) => s.workgroup_id === wg.id && s.status === "completed",
+        (s) => s.workgroup_id === wg.id && s.status === "completed" && s.completed_at,
       );
-      const boys = done.filter((s) => s.participant_type === "boy").length;
-      const girls = done.filter((s) => s.participant_type === "girl").length;
+      const boySessions = done.filter((s) => s.participant_type === "boy");
+      const girlSessions = done.filter((s) => s.participant_type === "girl");
+
+      const secFromSession = (s: ShowerSession) =>
+        Math.round((new Date(s.completed_at!).getTime() - new Date(s.started_at).getTime()) / 1000);
+
+      const boyAvgSec = boySessions.length > 0
+        ? Math.round(boySessions.reduce((n, s) => n + secFromSession(s), 0) / boySessions.length)
+        : 0;
+      const girlAvgSec = girlSessions.length > 0
+        ? Math.round(girlSessions.reduce((n, s) => n + secFromSession(s), 0) / girlSessions.length)
+        : 0;
 
       return {
         workgroup: wg,
         stat,
         avgSeconds: Math.round(stat.totalActualSeconds / stat.completed),
-        boys,
-        girls,
+        boys: boySessions.length,
+        girls: girlSessions.length,
+        boyAvgSec,
+        girlAvgSec,
       };
     })
     .filter((d): d is NonNullable<typeof d> => d !== null)
@@ -1560,7 +1572,7 @@ function ReportView({
   const totalCompleted = data.reduce((n, d) => n + d.stat.completed, 0);
   const totalSeconds = data.reduce((n, d) => n + d.stat.totalActualSeconds, 0);
   const overallAvg = Math.round(totalSeconds / totalCompleted);
-  const maxSeconds = data[data.length - 1].avgSeconds;
+  const maxSeconds = Math.max(...data.flatMap((d) => [d.boyAvgSec, d.girlAvgSec]).filter((s) => s > 0), 1);
   const avgLinePct = (overallAvg / maxSeconds) * 100;
 
   const totalBoys = data.reduce((n, d) => n + d.boys, 0);
@@ -1684,35 +1696,45 @@ function ReportView({
 
       <div className="report-chart">
         {data.map((d, i) => {
-          const barPct = Math.max(3, (d.avgSeconds / maxSeconds) * 100);
-          const bgTotal = d.boys + d.girls;
-          const boyPct = bgTotal > 0 ? (d.boys / bgTotal) * 100 : 0;
-          const girlPct = bgTotal > 0 ? (d.girls / bgTotal) * 100 : 0;
           const isFirst = i === 0;
           const isLast = i === data.length - 1;
           const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : String(i + 1);
 
+          const boyBarPct = d.boyAvgSec > 0 ? Math.max(2, (d.boyAvgSec / maxSeconds) * 100) : 0;
+          const girlBarPct = d.girlAvgSec > 0 ? Math.max(2, (d.girlAvgSec / maxSeconds) * 100) : 0;
+
           return (
             <div className="chart-row" key={d.workgroup.id}>
-              <div className="chart-rank">{medal}</div>
+              <div className="chart-rank">
+                {medal}
+                {isFirst && <div className="chart-badge">⚡</div>}
+                {isLast && data.length > 1 && <div className="chart-badge">🛁</div>}
+              </div>
               <div className="chart-label" title={d.workgroup.name}>
                 {d.workgroup.name}
               </div>
-              <div className="chart-track">
-                <div className="chart-fill" style={{ width: `${barPct}%` }}>
-                  {boyPct > 0 && (
-                    <div className="chart-seg seg-boy" style={{ width: `${boyPct}%` }} />
-                  )}
-                  {girlPct > 0 && (
-                    <div className="chart-seg seg-girl" style={{ width: `${girlPct}%` }} />
-                  )}
+              <div className="chart-bars">
+                <div className="chart-bar-line">
+                  <Mars size={12} className="chart-bar-icon" />
+                  <div className="chart-track">
+                    <div className="chart-fill seg-boy" style={{ width: `${boyBarPct}%` }}>
+                      {d.boyAvgSec > 0 && <span className="chart-bar-time">{formatTime(d.boyAvgSec)}</span>}
+                    </div>
+                    <div className="chart-avg-line" style={{ left: `${avgLinePct}%` }} />
+                  </div>
                 </div>
-                <div className="chart-avg-line" style={{ left: `${avgLinePct}%` }} />
+                <div className="chart-bar-line">
+                  <Venus size={12} className="chart-bar-icon" />
+                  <div className="chart-track">
+                    <div className="chart-fill seg-girl" style={{ width: `${girlBarPct}%` }}>
+                      {d.girlAvgSec > 0 && <span className="chart-bar-time">{formatTime(d.girlAvgSec)}</span>}
+                    </div>
+                    <div className="chart-avg-line" style={{ left: `${avgLinePct}%` }} />
+                  </div>
+                </div>
               </div>
-              <div className="chart-value">
+              <div className="chart-crew-avg">
                 {formatTime(d.avgSeconds)}
-                {isFirst && <span className="chart-badge">⚡</span>}
-                {isLast && data.length > 1 && <span className="chart-badge">🛁</span>}
               </div>
             </div>
           );
