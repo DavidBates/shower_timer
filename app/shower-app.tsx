@@ -146,6 +146,11 @@ const statusOrder: Record<TimerStatus, number> = {
   idle: 4,
 };
 
+function stripEmoji(text: string) {
+  // Keep only letters, numbers, whitespace, and common punctuation — drops all emoji/symbols
+  return text.replace(/[^\p{L}\p{N}\s'.,!?:;-]/gu, "").replace(/\s+/g, " ").trim();
+}
+
 function formatTime(seconds: number) {
   const negative = seconds < 0;
   const abs = Math.abs(Math.floor(seconds));
@@ -1645,9 +1650,9 @@ function buildReelSlides(
   const withData = ranked.filter((d) => d.avgSeconds > 0);
 
   const medals = [
-    { emoji: "🥇", heading: "Fastest Crew", quip: "Are you sure you're clean?", accent: "var(--amber)" },
-    { emoji: "🥈", heading: "Second Fastest", quip: "Squeaky clean and proud.", accent: "var(--muted)" },
-    { emoji: "🥉", heading: "Third Fastest", quip: "Still impressively quick.", accent: "#c97c4a" },
+    { emoji: "🥇", heading: "Fastest Crew", quip: "Are you sure you got clean? 🧽", accent: "var(--amber)" },
+    { emoji: "🥈", heading: "Second Fastest", quip: "Squeaky clean and proud. 🧼", accent: "var(--muted)" },
+    { emoji: "🥉", heading: "Third Fastest", quip: "Still impressively quick. 🫧", accent: "#c97c4a" },
   ];
 
   // Overview slide first
@@ -1687,9 +1692,9 @@ function buildReelSlides(
     });
     const diff = Math.abs(discrepancy.boyAvgSec - discrepancy.girlAvgSec);
     const longerGender = discrepancy.girlAvgSec > discrepancy.boyAvgSec ? "girls" : "boys";
-    const quip = longerGender === "girls"
-      ? "Bet your hair looks real nice 💅 Did you do your nails too?"
-      : "Extra scrub time, respect.";
+    const quip = longerGender === "boys"
+      ? "Well Boys, I Bet your hair looks real nice 💇‍♀️ Did you do your nails too? 💅"
+      : "Girls, that wasn’t a shower, that was a full spa retreat. 🧖‍♀️✨";
     slides.push({
       kind: "stat",
       emoji: "✂️",
@@ -1730,6 +1735,25 @@ function ReelModal({
   const [animKey, setAnimKey] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceName, setSelectedVoiceName] = useState<string>(
+    () => localStorage.getItem("reel-voice") ?? "",
+  );
+  const selectedVoiceNameRef = useRef(selectedVoiceName);
+  useEffect(() => { selectedVoiceNameRef.current = selectedVoiceName; }, [selectedVoiceName]);
+
+  // Voices load asynchronously — poll until populated
+  useEffect(() => {
+    if (typeof speechSynthesis === "undefined") return;
+    const load = () => {
+      const v = speechSynthesis.getVoices().filter((v) => v.lang.startsWith("en"));
+      if (v.length > 0) setVoices(v);
+    };
+    load();
+    speechSynthesis.addEventListener("voiceschanged", load);
+    return () => speechSynthesis.removeEventListener("voiceschanged", load);
+  }, []);
+
   // Background music: start on mount, stop on unmount
   useEffect(() => {
     const audio = new Audio(`${import.meta.env.BASE_URL}suds_and_squeeqs.mp3`);
@@ -1761,12 +1785,19 @@ function ReelModal({
     setAnimKey((k) => k + 1);
     if (typeof speechSynthesis !== "undefined") {
       speechSynthesis.cancel();
-      const utt = new SpeechSynthesisUtterance(s[next].speak);
+      const utt = new SpeechSynthesisUtterance(stripEmoji(s[next].speak));
       utt.rate = 0.95;
       utt.pitch = 1.1;
+      const voice = speechSynthesis.getVoices().find((v) => v.name === selectedVoiceNameRef.current);
+      if (voice) utt.voice = voice;
+      uttRef.current = utt; // stored so the advance effect can attach onend
       speechSynthesis.speak(utt);
+    } else {
+      uttRef.current = null;
     }
   }, []); // no prop deps — uses refs
+
+  const uttRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => {
     go(0);
@@ -1776,9 +1807,30 @@ function ReelModal({
   }, [go]);
 
   useEffect(() => {
-    const timer = setTimeout(() => go(index + 1), 6000);
-    return () => clearTimeout(timer);
-  }, [index, go]); // go is now stable, so only re-runs when index changes
+    let advanced = false;
+    const advance = () => {
+      if (advanced) return;
+      advanced = true;
+      go(index + 1);
+    };
+
+    // Primary trigger: fire 800ms after narration finishes
+    if (uttRef.current) {
+      uttRef.current.onend = () => setTimeout(advance, 800);
+    }
+
+    // Safety fallback: advance after 10s regardless (also cancels speech
+    // to prevent onend firing after the fallback already fired)
+    const safety = setTimeout(() => {
+      if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+      advance();
+    }, 10000);
+
+    return () => {
+      advanced = true; // block any pending advance callbacks from this slide
+      clearTimeout(safety);
+    };
+  }, [index, go]);
 
   const slide = slides[index];
 
@@ -1821,7 +1873,24 @@ function ReelModal({
           <div key={i} className={`reel-dot${i === index ? " active" : ""}`} />
         ))}
       </div>
-      <div className="reel-hint">tap anywhere to skip</div>
+      <div className="reel-bottom-bar" onClick={(e) => e.stopPropagation()}>
+        <div className="reel-hint">tap anywhere to skip</div>
+        {voices.length > 0 && (
+          <select
+            className="reel-voice-select"
+            value={selectedVoiceName}
+            onChange={(e) => {
+              setSelectedVoiceName(e.target.value);
+              localStorage.setItem("reel-voice", e.target.value);
+            }}
+          >
+            <option value="">Default voice</option>
+            {voices.map((v) => (
+              <option key={v.name} value={v.name}>{v.name}</option>
+            ))}
+          </select>
+        )}
+      </div>
       <button className="reel-close" onClick={(e) => { e.stopPropagation(); onClose(); }}>
         <X size={20} />
       </button>
