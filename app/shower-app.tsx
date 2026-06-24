@@ -1728,6 +1728,20 @@ function ReelModal({
 }) {
   const [index, setIndex] = useState(0);
   const [animKey, setAnimKey] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Background music: start on mount, stop on unmount
+  useEffect(() => {
+    const audio = new Audio(`${import.meta.env.BASE_URL}suds_and_squeeqs.mp3`);
+    audio.loop = true;
+    audio.volume = 0.5;
+    audioRef.current = audio;
+    audio.play().catch(() => { /* autoplay blocked — silently skip */ });
+    return () => {
+      audio.pause();
+      audio.src = "";
+    };
+  }, []);
 
   // Stable refs so `go` doesn't depend on ever-changing prop references.
   // (Parent re-renders every second via the clock tick, which would otherwise
