@@ -1569,6 +1569,17 @@ function ReportView({
   const boysPiePct = pieTotal > 0 ? (totalBoys / pieTotal) * 100 : 50;
   const girlsPiePct = pieTotal > 0 ? (totalGirls / pieTotal) * 100 : 50;
 
+  const completedWithTime = sessions.filter((s) => s.status === "completed" && s.completed_at);
+  const boySessions = completedWithTime.filter((s) => s.participant_type === "boy");
+  const girlSessions = completedWithTime.filter((s) => s.participant_type === "girl");
+  const boyAvg = boySessions.length > 0
+    ? Math.round(boySessions.reduce((n, s) => n + Math.round((new Date(s.completed_at!).getTime() - new Date(s.started_at).getTime()) / 1000), 0) / boySessions.length)
+    : 0;
+  const girlAvg = girlSessions.length > 0
+    ? Math.round(girlSessions.reduce((n, s) => n + Math.round((new Date(s.completed_at!).getTime() - new Date(s.started_at).getTime()) / 1000), 0) / girlSessions.length)
+    : 0;
+  const genderMaxAvg = Math.max(boyAvg, girlAvg, 1);
+
   return (
     <section className="report-view">
       <div>
@@ -1625,6 +1636,26 @@ function ReportView({
                   <div className="pie-label">Girls · {Math.round(girlsPiePct)}%</div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="report-card">
+          <div className="report-card-label">Avg time by gender</div>
+          <div className="gender-bars">
+            <div className="gender-bar-row">
+              <span className="gender-bar-label"><Mars size={14} /> Boys</span>
+              <div className="gender-bar-track">
+                <div className="gender-bar-fill" style={{ width: `${(boyAvg / genderMaxAvg) * 100}%`, background: "var(--teal)" }} />
+              </div>
+              <span className="gender-bar-value">{boyAvg > 0 ? formatTime(boyAvg) : "—"}</span>
+            </div>
+            <div className="gender-bar-row">
+              <span className="gender-bar-label"><Venus size={14} /> Girls</span>
+              <div className="gender-bar-track">
+                <div className="gender-bar-fill" style={{ width: `${(girlAvg / genderMaxAvg) * 100}%`, background: "var(--violet)" }} />
+              </div>
+              <span className="gender-bar-value">{girlAvg > 0 ? formatTime(girlAvg) : "—"}</span>
             </div>
           </div>
         </div>
