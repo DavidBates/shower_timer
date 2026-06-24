@@ -458,12 +458,41 @@ export default function ShowerApp() {
     return buildSummary(visibleTimers, groupStats, sessions, nowMs);
   }, [groupStats, nowMs, sessions, visibleTimers]);
 
-  const globalSummary = useMemo(() => {
-    return buildSummary(timers, groupStats, sessions, nowMs);
-  }, [groupStats, nowMs, sessions, timers]);
-
   const currentDayId = days.length > 0 ? days[days.length - 1].id : null;
   const currentDayName = days.length > 0 ? days[days.length - 1].name : null;
+
+  const currentDaySessions = useMemo(() => {
+    if (!currentDayId) return sessions;
+    return sessions.filter((s) => s.day_id === currentDayId);
+  }, [sessions, currentDayId]);
+
+  const currentDayGroupStats = useMemo(() => {
+    const stats = new Map<string, GroupStat>();
+    for (const workgroup of workgroups) stats.set(workgroup.id, emptyGroupStat());
+    for (const session of currentDaySessions) {
+      const stat = stats.get(session.workgroup_id) ?? emptyGroupStat();
+      stat.started += 1;
+      stat[session.participant_type] += 1;
+      if (session.status === "active") stat.active += 1;
+      if (session.status === "completed") {
+        stat.completed += 1;
+        if (session.completed_at) {
+          stat.totalActualSeconds += Math.round(
+            (new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 1000,
+          );
+        }
+      }
+      if (!stat.lastStarted || session.started_at > stat.lastStarted) {
+        stat.lastStarted = session.started_at;
+      }
+      stats.set(session.workgroup_id, stat);
+    }
+    return stats;
+  }, [currentDaySessions, workgroups]);
+
+  const currentDaySummary = useMemo(() => {
+    return buildSummary(timers, currentDayGroupStats, currentDaySessions, nowMs);
+  }, [timers, currentDayGroupStats, currentDaySessions, nowMs]);
 
   async function startNewDay() {
     const nextName = `Day ${days.length + 1}`;
@@ -607,7 +636,7 @@ export default function ShowerApp() {
 
   async function stopTimer(timer: ShowerTimer) {
     const timestamp = new Date().toISOString();
-    const remaining = getRemaining(timer, nowMs);
+    const remaining = Math.max(0, getRemaining(timer, nowMs)); // DB requires remaining_seconds >= 0
     setSavingId(timer.id);
     setError(null);
     try {
@@ -967,15 +996,15 @@ export default function ShowerApp() {
           busyAction={busyAction}
           currentDayName={currentDayName}
           groupDrafts={groupDrafts}
-          groupStats={groupStats}
+          groupStats={currentDayGroupStats}
           onDraftChange={(id, value) =>
             setGroupDrafts((current) => ({ ...current, [id]: value }))
           }
           onNewDay={() => void startNewDay()}
           onResetAll={() => void resetAll()}
           onSaveWorkgroup={(workgroup) => void saveWorkgroupName(workgroup)}
-          sessions={sessions}
-          summary={globalSummary}
+          sessions={currentDaySessions}
+          summary={currentDaySummary}
           timers={timers}
           nowMs={nowMs}
           workgroups={workgroups}
