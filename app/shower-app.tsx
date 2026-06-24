@@ -1538,15 +1538,21 @@ function AdminView({
           const activeCards = stationTimers.filter(
             (timer) => getTimerStatus(timer, nowMs) !== "idle",
           ).length;
-          const stationSessions = sessions.filter(
+          const stationSessionsList = sessions.filter(
             (session) => session.monitor_number === monitorNumber,
+          );
+          const stationBoys = stationSessionsList.filter(
+            (s) => s.participant_type === "boy",
+          ).length;
+          const stationGirls = stationSessionsList.filter(
+            (s) => s.participant_type === "girl",
           ).length;
 
           return (
             <StatCard
               icon={Monitor}
               key={monitorNumber}
-              label={`Monitor ${monitorNumber} - ${stationSessions} runs`}
+              label={`Monitor ${monitorNumber} · ${stationBoys}b / ${stationGirls}g`}
               value={`${activeCards}/${stationTimers.length}`}
             />
           );
@@ -1570,11 +1576,19 @@ function AdminView({
                 <th>Completed</th>
                 <th>Avg time</th>
                 <th>Last</th>
+                <th>Monitors</th>
               </tr>
             </thead>
             <tbody>
               {workgroups.map((workgroup) => {
                 const stat = groupStats.get(workgroup.id) ?? emptyGroupStat();
+                const crewMonitors = [
+                  ...new Set(
+                    sessions
+                      .filter((s) => s.workgroup_id === workgroup.id && s.monitor_number != null)
+                      .map((s) => s.monitor_number),
+                  ),
+                ].sort();
                 const status =
                   stat.active > 0
                     ? "In progress"
@@ -1623,6 +1637,7 @@ function AdminView({
                         : "—"}
                     </td>
                     <td>{formatClock(stat.lastStarted)}</td>
+                    <td>{crewMonitors.length > 0 ? crewMonitors.map((m) => `M${m}`).join(", ") : "—"}</td>
                   </tr>
                 );
               })}
