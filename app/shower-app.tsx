@@ -94,6 +94,13 @@ type ShowerSession = {
   completed_at: string | null;
   status: SessionStatus;
   created_at: string;
+  day_id: string | null;
+};
+
+type ShowerDay = {
+  id: string;
+  name: string;
+  created_at: string;
 };
 
 type GroupStat = {
@@ -279,6 +286,7 @@ export default function ShowerApp() {
   const [workgroups, setWorkgroups] = useState<Workgroup[]>([]);
   const [timers, setTimers] = useState<ShowerTimer[]>([]);
   const [sessions, setSessions] = useState<ShowerSession[]>([]);
+  const [days, setDays] = useState<ShowerDay[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
@@ -298,7 +306,7 @@ export default function ShowerApp() {
     if (!quiet) setLoading(true);
     setError(null);
 
-    const [workgroupResult, timerResult, sessionResult] = await Promise.all([
+    const [workgroupResult, timerResult, sessionResult, dayResult] = await Promise.all([
       supabase.from("workgroups").select("*").order("sort_order"),
       supabase
         .from("shower_timers")
@@ -311,10 +319,11 @@ export default function ShowerApp() {
         .neq("status", "cleared")
         .order("started_at", { ascending: false })
         .limit(3000),
+      supabase.from("shower_days").select("*").order("created_at", { ascending: true }),
     ]);
 
     const nextError =
-      workgroupResult.error ?? timerResult.error ?? sessionResult.error;
+      workgroupResult.error ?? timerResult.error ?? sessionResult.error ?? dayResult.error;
 
     if (nextError) {
       setError(nextError.message);
@@ -325,6 +334,7 @@ export default function ShowerApp() {
     setWorkgroups((workgroupResult.data ?? []) as Workgroup[]);
     setTimers((timerResult.data ?? []) as ShowerTimer[]);
     setSessions((sessionResult.data ?? []) as ShowerSession[]);
+    setDays((dayResult.data ?? []) as ShowerDay[]);
     setLastSynced(new Date());
     setLoading(false);
   }, []);
@@ -447,6 +457,76 @@ export default function ShowerApp() {
     return buildSummary(timers, groupStats, sessions, nowMs);
   }, [groupStats, nowMs, sessions, timers]);
 
+  const currentDayId = days.length > 0 ? days[days.length - 1].id : null;
+  const currentDayName = days.length > 0 ? days[days.length - 1].name : null;
+
+  async function startNewDay() {
+    const nextName = `Day ${days.length + 1}`;
+    if (
+      !window.confirm(
+        `Start ${nextName}? This will reset all timer cards. Session history is kept and will appear under "${days.length > 0 ? days[days.length - 1].name : "the current day"}" in the report.`,
+      )
+    ) return;
+
+    setBusyAction("new-day");
+    setError(null);
+
+    try {
+      const timestamp = new Date().toISOString();
+
+      // Create the new day record
+      const { data: newDay, error: dayError } = await supabase
+        .from("shower_days")
+        .insert({ name: nextName })
+        .select("id")
+        .single();
+
+      if (dayError) throw dayError;
+
+      // Clear any still-active sessions
+      const activeSessions = sessions.filter((s) => s.status === "active");
+      if (activeSessions.length > 0) {
+        const { error: clearError } = await supabase
+          .from("shower_sessions")
+          .update({ completed_at: timestamp, status: "cleared" })
+          .in("id", activeSessions.map((s) => s.id));
+        if (clearError) throw clearError;
+      }
+
+      // Reset all timer cards
+      if (timers.length > 0) {
+        const results = await Promise.all(
+          timers.map((timer) =>
+            supabase
+              .from("shower_timers")
+              .update({
+                label: "Available",
+                workgroup_id: null,
+                participant_type: null,
+                remaining_seconds: timer.duration_seconds,
+                running: false,
+                started_at: null,
+                active_session_id: null,
+                updated_at: timestamp,
+              })
+              .eq("id", timer.id),
+          ),
+        );
+        const updateError = results.find((r) => r.error)?.error;
+        if (updateError) throw updateError;
+      }
+
+      // Suppress unused-variable warning — newDay.id is the next currentDayId
+      void newDay;
+
+      await loadData(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to start new day.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   async function finishSession(timer: ShowerTimer, status: SessionStatus) {
     if (!timer.active_session_id) return;
 
@@ -488,6 +568,7 @@ export default function ShowerApp() {
           duration_seconds: durationSeconds,
           started_at: timestamp,
           status: "active",
+          day_id: currentDayId,
         })
         .select("id")
         .single();
@@ -879,11 +960,13 @@ export default function ShowerApp() {
       {view === "admin" && (
         <AdminView
           busyAction={busyAction}
+          currentDayName={currentDayName}
           groupDrafts={groupDrafts}
           groupStats={groupStats}
           onDraftChange={(id, value) =>
             setGroupDrafts((current) => ({ ...current, [id]: value }))
           }
+          onNewDay={() => void startNewDay()}
           onResetAll={() => void resetAll()}
           onSaveWorkgroup={(workgroup) => void saveWorkgroupName(workgroup)}
           sessions={sessions}
@@ -895,7 +978,7 @@ export default function ShowerApp() {
       )}
 
       {view === "report" && (
-        <ReportView groupStats={groupStats} sessions={sessions} workgroups={workgroups} />
+        <ReportView days={days} groupStats={groupStats} sessions={sessions} workgroups={workgroups} />
       )}
 
       {nextTarget && (
@@ -1337,10 +1420,12 @@ function EditCardModal({
 
 function AdminView({
   busyAction,
+  currentDayName,
   groupDrafts,
   groupStats,
   nowMs,
   onDraftChange,
+  onNewDay,
   onResetAll,
   onSaveWorkgroup,
   sessions,
@@ -1349,10 +1434,12 @@ function AdminView({
   workgroups,
 }: {
   busyAction: string | null;
+  currentDayName: string | null;
   groupDrafts: Record<string, string>;
   groupStats: Map<string, GroupStat>;
   nowMs: number;
   onDraftChange: (id: string, value: string) => void;
+  onNewDay: () => void;
   onResetAll: () => void;
   onSaveWorkgroup: (workgroup: Workgroup) => void;
   sessions: ShowerSession[];
@@ -1370,6 +1457,20 @@ function AdminView({
   return (
     <section className="admin-grid" aria-label="Admin stats">
       <div className="admin-actions">
+        <div className="admin-day-row">
+          <button
+            className="button green"
+            disabled={busyAction === "new-day"}
+            onClick={onNewDay}
+            type="button"
+          >
+            <Plus size={17} />
+            New Day
+          </button>
+          {currentDayName && (
+            <span className="admin-day-label">{currentDayName}</span>
+          )}
+        </div>
         <button
           className="button red"
           disabled={busyAction === "reset-all"}
@@ -1716,29 +1817,36 @@ function ReelModal({
 
 function ReportView({
   workgroups,
-  groupStats,
+  groupStats: _groupStats,
   sessions,
+  days,
 }: {
   workgroups: Workgroup[];
   groupStats: Map<string, GroupStat>;
   sessions: ShowerSession[];
+  days: ShowerDay[];
 }) {
   const [showReel, setShowReel] = useState(false);
+  const [selectedDayId, setSelectedDayId] = useState<string | "all">("all");
+
+  const filteredSessions = selectedDayId === "all"
+    ? sessions
+    : sessions.filter((s) => s.day_id === selectedDayId);
+
+  const secFromSession = (s: ShowerSession) =>
+    Math.round((new Date(s.completed_at!).getTime() - new Date(s.started_at).getTime()) / 1000);
 
   const data = workgroups
     .map((wg) => {
-      const stat = groupStats.get(wg.id) ?? emptyGroupStat();
-      if (stat.completed === 0) return null;
-
-      const done = sessions.filter(
+      const done = filteredSessions.filter(
         (s) => s.workgroup_id === wg.id && s.status === "completed" && s.completed_at,
       );
+      if (done.length === 0) return null;
+
       const boySessions = done.filter((s) => s.participant_type === "boy");
       const girlSessions = done.filter((s) => s.participant_type === "girl");
 
-      const secFromSession = (s: ShowerSession) =>
-        Math.round((new Date(s.completed_at!).getTime() - new Date(s.started_at).getTime()) / 1000);
-
+      const totalActualSeconds = done.reduce((n, s) => n + secFromSession(s), 0);
       const boyAvgSec = boySessions.length > 0
         ? Math.round(boySessions.reduce((n, s) => n + secFromSession(s), 0) / boySessions.length)
         : 0;
@@ -1748,8 +1856,9 @@ function ReportView({
 
       return {
         workgroup: wg,
-        stat,
-        avgSeconds: Math.round(stat.totalActualSeconds / stat.completed),
+        avgSeconds: Math.round(totalActualSeconds / done.length),
+        completed: done.length,
+        totalActualSeconds,
         boys: boySessions.length,
         girls: girlSessions.length,
         boyAvgSec,
@@ -1759,16 +1868,8 @@ function ReportView({
     .filter((d): d is NonNullable<typeof d> => d !== null)
     .sort((a, b) => a.avgSeconds - b.avgSeconds);
 
-  if (data.length === 0) {
-    return (
-      <div className="empty-state">
-        No completed sessions yet — get those showers going! 🚿
-      </div>
-    );
-  }
-
-  const totalCompleted = data.reduce((n, d) => n + d.stat.completed, 0);
-  const totalSeconds = data.reduce((n, d) => n + d.stat.totalActualSeconds, 0);
+  const totalCompleted = data.reduce((n, d) => n + d.completed, 0);
+  const totalSeconds = data.reduce((n, d) => n + d.totalActualSeconds, 0);
   const overallAvg = Math.round(totalSeconds / totalCompleted);
   const maxSeconds = Math.max(...data.flatMap((d) => [d.boyAvgSec, d.girlAvgSec]).filter((s) => s > 0), 1);
   const avgLinePct = (overallAvg / maxSeconds) * 100;
@@ -1779,7 +1880,7 @@ function ReportView({
   const boysPiePct = pieTotal > 0 ? (totalBoys / pieTotal) * 100 : 50;
   const girlsPiePct = pieTotal > 0 ? (totalGirls / pieTotal) * 100 : 50;
 
-  const completedWithTime = sessions.filter((s) => s.status === "completed" && s.completed_at);
+  const completedWithTime = filteredSessions.filter((s) => s.status === "completed" && s.completed_at);
   const boySessions = completedWithTime.filter((s) => s.participant_type === "boy");
   const girlSessions = completedWithTime.filter((s) => s.participant_type === "girl");
   const boyAvg = boySessions.length > 0
@@ -1797,6 +1898,36 @@ function ReportView({
       {showReel && (
         <ReelModal slides={reelSlides} onClose={() => setShowReel(false)} />
       )}
+
+      {days.length > 0 && (
+        <div className="day-tabs">
+          <button
+            className={`day-tab${selectedDayId === "all" ? " active" : ""}`}
+            onClick={() => setSelectedDayId("all")}
+            type="button"
+          >
+            All
+          </button>
+          {days.map((day) => (
+            <button
+              key={day.id}
+              className={`day-tab${selectedDayId === day.id ? " active" : ""}`}
+              onClick={() => setSelectedDayId(day.id)}
+              type="button"
+            >
+              {day.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {data.length === 0 ? (
+        <div className="empty-state">
+          {selectedDayId === "all"
+            ? "No completed sessions yet — get those showers going! 🚿"
+            : "No completed sessions for this day yet."}
+        </div>
+      ) : (<>
       <div className="report-header">
         <div>
           <h2 className="report-title">Shower Speed Leaderboard</h2>
@@ -1949,6 +2080,7 @@ function ReportView({
           );
         })}
       </div>
+      </>)}
     </section>
   );
 }

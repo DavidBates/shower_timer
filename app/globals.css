@@ -678,6 +678,50 @@ td {
   gap: 16px;
 }
 
+.day-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.day-tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.day-tab:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.day-tab.active {
+  border-color: rgba(45, 212, 191, 0.54);
+  background: rgba(45, 212, 191, 0.14);
+  color: var(--cream);
+}
+
+.admin-day-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-day-label {
+  font-size: 0.88rem;
+  font-weight: 900;
+  color: var(--teal);
+}
+
 .report-header {
   display: flex;
   align-items: flex-start;
@@ -1247,7 +1291,7 @@ td {
   }
 
   .chart-row {
-    grid-template-columns: 28px minmax(0, 90px) 1fr;
+    grid-template-columns: 28px minmax(0, 80px) 1fr 44px;
   }
 
   .bottom-nav {
